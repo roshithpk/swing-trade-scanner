@@ -3,6 +3,7 @@ import pandas as pd
 import streamlit as st
 from ta.momentum import RSIIndicator
 from ta.trend import EMAIndicator
+import numpy as np
 
 # --- APP SETUP ---
 st.set_page_config(page_title="Indian Swing Trade Scanner", layout="wide")
@@ -20,31 +21,32 @@ def get_indian_tickers():
         'RELIANCE.NS', 'TCS.NS', 'HDFCBANK.NS', 'INFY.NS', 'HINDUNILVR.NS',
         'ICICIBANK.NS', 'KOTAKBANK.NS', 'BHARTIARTL.NS', 'LT.NS', 'SBIN.NS',
         'BAJFINANCE.NS', 'HDFC.NS', 'ITC.NS', 'ASIANPAINT.NS', 'DMART.NS',
-        'MARUTI.NS', 'TITAN.NS', 'SUNPHARMA.NS', 'NESTLEIND.NS', 'ONGC.NS',
-        'ADANIENT.NS', 'ADANIPORTS.NS', 'TATASTEEL.NS', 'POWERGRID.NS', 'NTPC.NS',
-        'ULTRACEMCO.NS', 'WIPRO.NS', 'SHREECEM.NS', 'JSWSTEEL.NS', 'AXISBANK.NS'
+        'MARUTI.NS', 'TITAN.NS', 'SUNPHARMA.NS', 'NESTLEIND.NS', 'ONGC.NS'
     ]
 
-# --- SCAN FUNCTION ---
+# --- FIXED SCAN FUNCTION ---
 def scan_stock(ticker):
     try:
+        # Get data
         data = yf.download(ticker, period="1mo", progress=False)
         
+        # Data validation
         if data.empty or len(data) < 20:
             return None
             
+        # Clean data
         data = data.dropna()
-        close_prices = data['Close'].astype('float64')
+        close_prices = data['Close'].values.flatten()  # Convert to 1D array
         
-        if len(close_prices) < 20:
-            return None
-            
-        ema_20 = EMAIndicator(close=close_prices, window=20).ema_indicator()
-        rsi = RSIIndicator(close=close_prices, window=14).rsi()
+        # Calculate indicators (with proper 1D data)
+        ema_20 = EMAIndicator(close=pd.Series(close_prices), window=20).ema_indicator()
+        rsi = RSIIndicator(close=pd.Series(close_prices), window=14).rsi()
         
+        # Get latest values
         latest = data.iloc[-1]
         avg_volume = data['Volume'].mean()
         
+        # Check conditions
         volume_ok = latest['Volume'] > avg_volume * min_volume
         trend_ok = latest['Close'] > ema_20.iloc[-1]
         rsi_ok = rsi_low < rsi.iloc[-1] < rsi_high
@@ -54,7 +56,7 @@ def scan_stock(ticker):
             return {
                 "Stock": ticker.replace(".NS", ""),
                 "Price (₹)": f"₹{latest['Close']:.2f}",
-                "Volume (x Avg)": f"{latest['Volume'] / avg_volume:.1f}",
+                "Volume (x)": f"{latest['Volume']/avg_volume:.1f}",
                 "RSI": f"{rsi.iloc[-1]:.1f}",
                 "Trend": "🟢" if trend_ok else "🔴",
                 "Why Buy?": "📈 Breakout + Volume Spike"
