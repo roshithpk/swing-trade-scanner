@@ -17,7 +17,7 @@ def load_stocks():
 stock_list = load_stocks()
 
 stock_df = load_stocks()
-stock_list = stock_df["Symbol"].dropna().unique().tolist()
+stock_list = stock_df["Ticker"].dropna().unique().tolist()
 
 # --- SIDEBAR FILTERS ---
 with st.sidebar:
