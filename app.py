@@ -105,8 +105,8 @@ if user_stock:
         data = yf.download(full_ticker, period="1mo", progress=False)
         if not data.empty and len(data) > 14:
             data = data.dropna()
-            close_prices = pd.Series(data["Close"].astype(float)).squeeze()
-            volumes = pd.Series(data["Volume"].astype(float)).squeeze()
+            close_prices = pd.Series(data["Close"].values.flatten(), index=data.index)
+            volumes = pd.Series(data["Volume"].values.flatten(), index=data.index)
 
             ema_20 = EMAIndicator(close=close_prices, window=20).ema_indicator()
             rsi = RSIIndicator(close=close_prices, window=14).rsi()
