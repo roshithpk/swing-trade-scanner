@@ -144,4 +144,4 @@ if user_stock:
 
 # --- FOOTER ---
 st.markdown("---")
-st.caption("⚡ Developed by Roshith •  Created for Indian Swing Traders")
+st.caption("⚡ Developed by Roshith •  Please feed your comments to roshith77@gmail.com")
