@@ -19,7 +19,7 @@ stocks_df = load_stocks()
 # --- SIDEBAR FILTERS ---
 st.sidebar.header("Filters")
 
-# Category filter with options from CSV
+# Category filter
 categories = ['All'] + sorted(stocks_df['Category'].unique())
 selected_category = st.sidebar.selectbox("Select Category", categories)
 
@@ -53,11 +53,11 @@ def scan_stock(ticker):
         
         data = data.dropna()
         
-        close_prices = data['Close'].astype(float).squeeze()
+        close_prices = data['Close'].astype(float)
         if len(close_prices.shape) > 1:
             close_prices = close_prices.squeeze()
         
-        volumes = data['Volume'].astype(float).squeeze()
+        volumes = data['Volume'].astype(float)
         if len(volumes.shape) > 1:
             volumes = volumes.squeeze()
         
@@ -96,17 +96,43 @@ def scan_stock(ticker):
                 "Trend": "🟢" if trend_ok else "🔴",
                 "Why Buy?": "📈 Breakout + Volume Spike" if breakout_ok else "Volume Spike"
             }
+        else:
+            # Return basic info with "No buy signal"
+            return {
+                "Stock": ticker.replace(".NS", ""),
+                "Price (₹)": f"₹{latest_close:.2f}",
+                "Volume (x)": f"{latest_volume / avg_volume:.1f}",
+                "RSI": f"{rsi.iloc[-1]:.1f}",
+                "Trend": "🟢" if trend_ok else "🔴",
+                "Why Buy?": "No buy signal based on current filters"
+            }
     except Exception as e:
         st.error(f"Error scanning {ticker}: {str(e)}")
         return None
 
-# --- RUN SCAN ---
+# --- USER INPUT FOR SINGLE STOCK ---
+st.sidebar.header("Check a Single Stock")
+user_stock_input = st.sidebar.text_input("Enter stock ticker (e.g. INFY)", "").strip().upper()
+
+if user_stock_input:
+    # Add .NS if missing (assuming NSE stocks)
+    if not user_stock_input.endswith(".NS"):
+        user_stock_input += ".NS"
+    
+    st.write(f"### Scan result for {user_stock_input.replace('.NS','')}:")
+    result = scan_stock(user_stock_input)
+    if result:
+        st.write(result)
+    else:
+        st.warning("No data or no buy signal found for this stock.")
+
+# --- RUN SCAN ON FILTERED LIST ---
 if st.button("Scan Indian Stocks"):
     with st.spinner("Scanning selected stocks..."):
         results = []
         for ticker in tickers_list:
             result = scan_stock(ticker)
-            if result:
+            if result and "No buy signal" not in result["Why Buy?"]:
                 results.append(result)
     
     if results:
