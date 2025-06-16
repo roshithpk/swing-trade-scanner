@@ -12,7 +12,7 @@ st.title("📈 Indian Swing Trade Scanner (5-10 Days)")
 @st.cache_data
 def load_stocks():
     df = pd.read_csv("stocks.csv")  # Ensure the file is present in the same directory
-    return df['Symbol'].dropna().unique().tolist()
+    return df['ticker'].dropna().unique().tolist()
 
 stock_list = load_stocks()
 
