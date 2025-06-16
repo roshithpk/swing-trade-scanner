@@ -53,11 +53,11 @@ def scan_stock(ticker):
         
         data = data.dropna()
         
-        close_prices = data['Close'].astype(float).squeeze()
+        close_prices = data['Close'].astype(float)
         if len(close_prices.shape) > 1:
             close_prices = close_prices.squeeze()
         
-       volumes = data['Volume'].astype(float).squeeze()
+       volumes = data['Volume'].astype(float)
         if len(volumes.shape) > 1:
             volumes = volumes.squeeze()
         
