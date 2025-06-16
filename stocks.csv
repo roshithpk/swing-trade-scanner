@@ -1,0 +1,416 @@
+Ticker,Name,Category
+RELIANCE.NS,Reliance Industries,Nifty 50
+TCS.NS,Tata Consultancy Services,Nifty 50
+HDFCBANK.NS,HDFC Bank,Nifty 50
+INFY.NS,Infosys,Nifty 50
+ICICIBANK.NS,ICICI Bank,Nifty 50
+ITC.NS,ITC Ltd,Nifty 50
+LT.NS,Larsen & Toubro,Nifty 50
+SBIN.NS,State Bank of India,Nifty 50
+KOTAKBANK.NS,Kotak Mahindra Bank,Nifty 50
+BHARTIARTL.NS,Bharti Airtel,Nifty 50
+ASIANPAINT.NS,Asian Paints,Nifty 50
+HINDUNILVR.NS,Hindustan Unilever,Nifty 50
+BAJFINANCE.NS,Bajaj Finance,Nifty 50
+SUNPHARMA.NS,Sun Pharma,Nifty 50
+TITAN.NS,Titan Company,Nifty 50
+ADANIENT.NS,Adani Enterprises,Nifty 50
+ADANIPORTS.NS,Adani Ports,Nifty 50
+TATAMOTORS.NS,Tata Motors,Nifty 50
+ULTRACEMCO.NS,UltraTech Cement,Nifty 50
+HCLTECH.NS,HCL Technologies,Nifty 50
+NTPC.NS,NTPC Ltd,Nifty 50
+POWERGRID.NS,Power Grid Corp,Nifty 50
+JSWSTEEL.NS,JSW Steel,Nifty 50
+ONGC.NS,Oil & Natural Gas Corp,Nifty 50
+INDUSINDBK.NS,IndusInd Bank,Nifty 50
+COALINDIA.NS,Coal India,Nifty 50
+WIPRO.NS,Wipro,Nifty 50
+BPCL.NS,Bharat Petroleum,Nifty 50
+TECHM.NS,Tech Mahindra,Nifty 50
+GRASIM.NS,Grasim Industries,Nifty 50
+NESTLEIND.NS,Nestle India,Nifty 50
+CIPLA.NS,Cipla,Nifty 50
+EICHERMOT.NS,Eicher Motors,Nifty 50
+HDFCLIFE.NS,HDFC Life Insurance,Nifty 50
+DRREDDY.NS,Dr Reddy's Labs,Nifty 50
+BRITANNIA.NS,Britannia,Nifty 50
+HEROMOTOCO.NS,Hero MotoCorp,Nifty 50
+BAJAJ-AUTO.NS,Bajaj Auto,Nifty 50
+DIVISLAB.NS,Divi's Labs,Nifty 50
+BAJAJFINSV.NS,Bajaj Finserv,Nifty 50
+APOLLOHOSP.NS,Apollo Hospitals,Nifty 50
+MARUTI.NS,Maruti Suzuki,Nifty 50
+HINDALCO.NS,Hindalco,Nifty 50
+SBILIFE.NS,SBI Life Insurance,Nifty 50
+TATASTEEL.NS,Tata Steel,Nifty 50
+ICICIPRULI.NS,ICICI Prudential,Nifty 50
+SHREECEM.NS,Shree Cement,Nifty 50
+AXISBANK.NS,Axis Bank,Nifty 50
+ADANIGREEN.NS,Adani Green,F&O
+PNB.NS,Punjab National Bank,F&O
+BANDHANBNK.NS,Bandhan Bank,F&O
+DLF.NS,DLF Ltd,F&O
+AMBUJACEM.NS,Ambuja Cements,F&O
+ACC.NS,ACC Ltd,F&O
+AUROPHARMA.NS,Aurobindo Pharma,F&O
+BEL.NS,Bharat Electronics,F&O
+BIOCON.NS,Biocon Ltd,F&O
+CANBK.NS,Canara Bank,F&O
+CHOLAFIN.NS,Cholamandalam Inv,F&O
+CONCOR.NS,Container Corp,F&O
+CROMPTON.NS,Crompton Greaves,F&O
+ESCORTS.NS,Escorts Kubota,F&O
+FEDERALBNK.NS,Federal Bank,F&O
+GAIL.NS,GAIL (India),F&O
+GMRINFRA.NS,GMR Airports,F&O
+GODREJCP.NS,Godrej Consumer,F&O
+GRANULES.NS,Granules India,F&O
+GUJGASLTD.NS,Gujarat Gas,F&O
+HAVELLS.NS,Havells India,F&O
+HINDPETRO.NS,Hindustan Petroleum,F&O
+IBULHSGFIN.NS,Indiabulls Hsg Fin,F&O
+IDFCFIRSTB.NS,IDFC First Bank,F&O
+INDHOTEL.NS,Indian Hotels,F&O
+INDIGO.NS,InterGlobe Aviation,F&O
+IOC.NS,Indian Oil Corp,F&O
+IRCTC.NS,IRCTC Ltd,F&O
+LICHSGFIN.NS,LIC Housing Finance,F&O
+M&M.NS,Mahindra & Mahindra,F&O
+MANAPPURAM.NS,Manappuram Finance,F&O
+MFSL.NS,Max Financial Services,F&O
+MGL.NS,Mahanagar Gas,F&O
+MINDTREE.NS,MindTree Ltd,F&O
+MUTHOOTFIN.NS,Muthoot Finance,F&O
+NAUKRI.NS,Info Edge (Naukri),F&O
+NAVINFLUOR.NS,Navin Fluorine,F&O
+OBEROIRLTY.NS,Oberoi Realty,F&O
+PEL.NS,Piramal Enterprises,F&O
+PETRONET.NS,Petronet LNG,F&O
+PIDILITIND.NS,Pidilite Industries,F&O
+POLYCAB.NS,Polycab India,F&O
+RAMCOCEM.NS,Ramco Cements,F&O
+RBLBANK.NS,RBL Bank,F&O
+SAIL.NS,Steel Authority,F&O
+SRF.NS,SRF Ltd,F&O
+TATACONSUM.NS,Tata Consumer,F&O
+TATAELXSI.NS,Tata Elxsi,F&O
+TRENT.NS,Trent Ltd,F&O
+TVSMOTOR.NS,TVS Motor,F&O
+UBL.NS,United Breweries,F&O
+UNIONBANK.NS,Union Bank of India,F&O
+VOLTAS.NS,Voltas Ltd,F&O
+ZEEL.NS,Zee Entertainment,F&O
+ALKEM.NS,Alkem Laboratories,F&O
+AARTIIND.NS,Aarti Industries,F&O
+ABBOTINDIA.NS,Abbott India,F&O
+ADANIPOWER.NS,Adani Power,F&O
+AIAENG.NS,AIA Engineering,F&O
+ALKYLAMINE.NS,Alkyl Amines,F&O
+ASTRAL.NS,Astral Ltd,F&O
+ATUL.NS,Atul Ltd,F&O
+BALKRISIND.NS,Balkrishna Industries,F&O
+BATAINDIA.NS,Bata India,F&O
+BERGEPAINT.NS,Berger Paints,F&O
+BHEL.NS,BHEL,F&O
+BSOFT.NS,Birlasoft,F&O
+CENTURYTEX.NS,Century Textiles,F&O
+CESC.NS,CESC Ltd,F&O
+COFORGE.NS,Coforge,F&O
+COROMANDEL.NS,Coromandel Intl,F&O
+CUMMINSIND.NS,Cummins India,F&O
+DEEPAKNTR.NS,Deepak Nitrite,F&O
+DELHIVERY.NS,Delhivery,F&O
+DIXON.NS,Dixon Tech,F&O
+EDELWEISS.NS,Edelweiss,F&O
+EMAMILTD.NS,Emami Ltd,F&O
+ENDURANCE.NS,Endurance Tech,F&O
+EXIDEIND.NS,Exide Industries,F&O
+FINEORG.NS,Fine Organic,F&O
+FORTIS.NS,Fortis Healthcare,F&O
+GICRE.NS,General Insurance Corp,F&O
+GLAND.NS,Gland Pharma,F&O
+GLAXO.NS,GlaxoSmithKline Pharma,F&O
+GLENMARK.NS,Glenmark Pharma,F&O
+GNFC.NS,Gujarat Narmada Fert,F&O
+GODREJPROP.NS,Godrej Properties,F&O
+GUJALKALI.NS,Gujarat Alkalies,F&O
+HEG.NS,HEG Ltd,F&O
+HFCL.NS,HFCL Ltd,F&O
+IGL.NS,Indraprastha Gas,F&O
+INDIACEM.NS,India Cements,F&O
+INDIAMART.NS,IndiaMART Intermesh,F&O
+INDIGO.NS,IndiGo,F&O
+INDOSTAR.NS,IndoStar Capital,F&O
+IPCALAB.NS,IPCA Labs,F&O
+JINDALSTEL.NS,Jindal Steel & Power,F&O
+JUBLFOOD.NS,Jubilant Foodworks,F&O
+JUBLPHARMA.NS,Jubilant Pharmova,F&O
+JSWENERGY.NS,JSW Energy,F&O
+JSWHL.NS,JSW Holdings,F&O
+JYOTHYLAB.NS,Jyothy Labs,F&O
+KAJARIACER.NS,Kajaria Ceramics,F&O
+KALPATPOWR.NS,Kalpataru Power,F&O
+KARURVYSYA.NS,Karur Vysya Bank,F&O
+KEI.NS,KEI Industries,F&O
+KPRMILL.NS,KPR Mill,F&O
+LAURUSLABS.NS,Laurus Labs,F&O
+LINDEINDIA.NS,Linde India,F&O
+LTI.NS,Larsen & Toubro Infotech,F&O
+LTTS.NS,L&T Technology Services,F&O
+LUXIND.NS,Lux Industries,F&O
+MAHABANK.NS,Bank of Maharashtra,F&O
+MAHINDCIE.NS,Mahindra CIE,F&O
+METROPOLIS.NS,Metropolis Healthcare,F&O
+MPHASIS.NS,Mphasis Ltd,F&O
+MRF.NS,MRF Tyres,F&O
+NAM-INDIA.NS,Nippon Life AMC,F&O
+NATCOPHARM.NS,Natco Pharma,F&O
+NAVNETEDUL.NS,Navneet Education,F&O
+NHPC.NS,NHPC Ltd,F&O
+NMDC.NS,NMDC Ltd,F&O
+NOCIL.NS,NOCIL Ltd,F&O
+OFSS.NS,Oracle Financial Services,F&O
+PAGEIND.NS,Page Industries,F&O
+PERSISTENT.NS,Persistent Systems,F&O
+PFIZER.NS,Pfizer India,F&O
+PIIND.NS,PI Industries,F&O
+PRAJIND.NS,Praj Industries,F&O
+PRESTIGE.NS,Prestige Estates,F&O
+PVRINOX.NS,PVR Inox Ltd,F&O
+RAJESHEXPO.NS,Rajesh Exports,F&O
+RECLTD.NS,REC Ltd,F&O
+RELAXO.NS,Relaxo Footwear,F&O
+RENUKA.NS,Shree Renuka Sugars,F&O
+SANOFI.NS,Sanofi India,F&O
+SEQUENT.NS,Sequent Scientific,F&O
+SFL.NS,Sheela Foam,F&O
+SJVN.NS,SJVN Ltd,F&O
+SOBHA.NS,Sobha Ltd,F&O
+SOLARA.NS,Solara Active Pharma,F&O
+SPARC.NS,SUN Pharma Advanced,F&O
+SPICEJET.NS,SpiceJet,F&O
+STLTECH.NS,Sterlite Technologies,F&O
+STRTECH.NS,Sterlite Tech (Dup),F&O
+SUNTV.NS,Sun TV Network,F&O
+SUPRAJIT.NS,Suprajit Engineering,F&O
+SUPREMEIND.NS,Supreme Industries,F&O
+SYNGENE.NS,Syngene Intl,F&O
+TASTYBITE.NS,Tasty Bite Eatables,F&O
+TCI.NS,Transport Corp of India,F&O
+THERMAX.NS,Thermax Ltd,F&O
+TIINDIA.NS,Tubes Investments,F&O
+TORNTPHARM.NS,Torrent Pharma,F&O
+TORNTPOWER.NS,Torrent Power,F&O
+TRIDENT.NS,Trident Ltd,F&O
+UJJIVAN.NS,Ujjivan Financial,F&O
+UPL.NS,UPL Ltd,F&O
+VGUARD.NS,V-Guard Industries,F&O
+VINATIORGA.NS,Vinati Organics,F&O
+VOLTAS.NS,Voltas Ltd,F&O
+WELCORP.NS,Welspun Corp,F&O
+WELSPUNIND.NS,Welspun India,F&O
+WHIRLPOOL.NS,Whirlpool India,F&O
+WIPRO.NS,Wipro Ltd,Nifty 50
+WOCKPHARMA.NS,Wockhardt Ltd,F&O
+YESBANK.NS,Yes Bank,F&O
+ZEEL.NS,Zee Entertainment,F&O
+ZYDUSLIFE.NS,Zydus Lifesciences,F&O
+3MINDIA.NS,3M India,F&O
+AAVAS.NS,Aavas Financiers,F&O
+ADANITRANS.NS,Adani Transmission,F&O
+ADVENZYMES.NS,Advanced Enzyme Tech,F&O
+AFFLE.NS,Affle India,F&O
+AJANTPHARM.NS,Ajanta Pharma,F&O
+APLAPOLLO.NS,APL Apollo Tubes,F&O
+APTUS.NS,Aptus Value Housing,F&O
+ARVINDFASN.NS,Arvind Fashions,F&O
+ASAHIINDIA.NS,Asahi India Glass,F&O
+ASIANENERGY.NS,Asian Energy Services,F&O
+AVANTIFEED.NS,Avanti Feeds,F&O
+BASF.NS,BASF India,F&O
+BBTC.NS,Bombay Burmah Trading,F&O
+BLISSGVS.NS,Bliss GVS Pharma,F&O
+BORORENEW.NS,Borosil Renewables,F&O
+BRIGADE.NS,Brigade Enterprises,F&O
+CANFINHOME.NS,Can Fin Homes,F&O
+CAPLIPOINT.NS,Caplin Point Labs,F&O
+CARBORUNIV.NS,Carborundum Universal,F&O
+CASTROLIND.NS,Castrol India,F&O
+CCL.NS,CCL Products,F&O
+CDSL.NS,Central Depository Services,F&O
+CEATLTD.NS,CEAT Ltd,F&O
+CENTRALBK.NS,Central Bank of India,F&O
+CGCL.NS,Capri Global Capital,F&O
+CHEMPLASTS.NS,Chemplast Sanmar,F&O
+CHOLAFIN.NS,Cholamandalam Fin Hold,Nifty Next 50
+CLEAN.NS,Clean Science & Tech,F&O
+CMSINFO.NS,CMS Info Systems,F&O
+CREDITACC.NS,CreditAccess Grameen,F&O
+CSBBANK.NS,CSB Bank,F&O
+DCAL.NS,Dishman Carbogen Amcis,F&O
+DCMSHRIRAM.NS,DCM Shriram,F&O
+DCW.NS,DCW Ltd,F&O
+DEVYANI.NS,Devyani Intl,F&O
+DODLA.NS,Dodla Dairy,F&O
+ECLERX.NS,eClerx Services,F&O
+EIHOTEL.NS,EIH Ltd,F&O
+ESABINDIA.NS,ESAB India,F&O
+EVEREADY.NS,Eveready Ind,F&O
+FDC.NS,FDC Ltd,F&O
+FSL.NS,Firstsource Solutions,F&O
+GABRIEL.NS,Gabriel India,F&O
+GDL.NS,Gateway Distriparks,F&O
+GHCL.NS,GHCL Ltd,F&O
+GILLETTE.NS,Gillette India,F&O
+GODFRYPHLP.NS,Godfrey Phillips,F&O
+GPIL.NS,Godawari Power & Ispat,F&O
+GRANULES.NS,Granules India,F&O
+GREAVESCOT.NS,Greaves Cotton,F&O
+GRINDWELL.NS,Grindwell Norton,F&O
+GULFOILLUB.NS,Gulf Oil Lubricants,F&O
+HATSUN.NS,Hatsun Agro Product,F&O
+HBLPOWER.NS,HBL Power Systems,F&O
+HGINFRA.NS,H.G. Infra Engg,F&O
+HIKAL.NS,Hikal Ltd,F&O
+HLEGLAS.NS,HLE Glascoat,F&O
+HMT.NS,HMT Ltd,F&O
+HUDCO.NS,HUDCO,F&O
+IBULHSGFIN.NS,Indiabulls Housing,F&O
+IIFL.NS,IIFL Finance,F&O
+IIFLWAM.NS,IIFL Wealth Mgmt,F&O
+IMFA.NS,Indian Metals & Ferro,F&O
+INDIAGLYCO.NS,India Glycols,F&O
+INDIGOPNTS.NS,Indigo Paints,F&O
+INDOCO.NS,Indoco Remedies,F&O
+INDOSTAR.NS,IndoStar Capital Finance,F&O
+INFIBEAM.NS,Infibeam Avenues,F&O
+IRB.NS,IRB Infrastructure,F&O
+IRCON.NS,Ircon Intl,F&O
+ISEC.NS,ICICI Securities,F&O
+ITI.NS,ITI Ltd,F&O
+JAMNAAUTO.NS,Jamna Auto,F&O
+JBCHEPHARM.NS,J.B. Chemicals,F&O
+JCHAC.NS,Johnson Controls-Hitachi,F&O
+JKCEMENT.NS,JK Cement,F&O
+JKLAKSHMI.NS,JK Lakshmi Cement,F&O
+JKPAPER.NS,JK Paper,F&O
+JSL.NS,Jindal Stainless,F&O
+JSWISPL.NS,JSW Ispat,F&O
+KALYANKJIL.NS,Kalyan Jewellers,F&O
+KARDA.NS,Karda Constructions,F&O
+KAVVERITEL.NS,Kavveri Telecom,F&O
+KIOCL.NS,KIOCL Ltd,F&O
+KIRLOSENG.NS,Kirloskar Oil Engines,F&O
+KNRCON.NS,KNR Constructions,F&O
+KOLTEPATIL.NS,Kolte-Patil Developers,F&O
+KSB.NS,KSB Ltd,F&O
+KSL.NS,Kalyani Steels,F&O
+LAXMIMACH.NS,Laxmi Machine Works,F&O
+LEMONTREE.NS,Lemon Tree Hotels,F&O
+LINDEINDIA.NS,Linde India,F&O
+LUXIND.NS,Lux Industries,F&O
+MAHINDCIE.NS,Mahindra CIE Auto,F&O
+MAHLIFE.NS,Mahindra Lifespace,F&O
+MANAPPURAM.NS,Manappuram Finance,F&O
+MATRIMONY.NS,Matrimony.com,F&O
+MAZDOCK.NS,Mazagon Dock Shipbuilders,F&O
+MBAPL.NS,Madhya Bharat Agro,F&O
+MCDOWELL-N.NS,United Spirits,F&O
+MCX.NS,Multi Commodity Exchange,F&O
+MEDPLUS.NS,Medplus Health,F&O
+METROPOLIS.NS,Metropolis Healthcare,F&O
+MINDACORP.NS,Minda Corporation,F&O
+MIRZAINT.NS,Mirza International,F&O
+MMTC.NS,MMTC Ltd,F&O
+MOIL.NS,MOIL Ltd,F&O
+MOREPENLAB.NS,Morepen Labs,F&O
+MOTHERSON.NS,Motherson Sumi Wiring,F&O
+MOTILALOFS.NS,Motilal Oswal Financial,F&O
+MRF.NS,MRF Ltd,F&O
+MRPL.NS,Mangalore Refinery,F&O
+MSTCLTD.NS,MSTC Ltd,F&O
+MTARTECH.NS,MTAR Technologies,F&O
+MTNL.NS,Mahanagar Telephone Nigam,F&O
+NAUKRI.NS,Info Edge (India),Nifty Next 50
+NAVINFLUOR.NS,Navin Fluorine,F&O
+NBCC.NS,NBCC India,F&O
+NCC.NS,NCC Ltd,F&O
+NESCO.NS,NESCO Ltd,F&O
+NILKAMAL.NS,Nilkamal Ltd,F&O
+NLCINDIA.NS,NLC India,F&O
+NMDC.NS,NMDC Ltd,F&O
+NOCIL.NS,NOCIL Ltd,F&O
+NTPC.NS,NTPC Ltd,Nifty 50
+NUCLEUS.NS,Nucleus Software,F&O
+OIL.NS,Oil India,F&O
+OMAXE.NS,Omaxe Ltd,F&O
+ORIENTCEM.NS,Orient Cement,F&O
+ORIENTELEC.NS,Orient Electric,F&O
+ORIENTREF.NS,Orient Refractories,F&O
+PAGEIND.NS,Page Industries,F&O
+PARAGMILK.NS,Parag Milk Foods,F&O
+PERSISTENT.NS,Persistent Systems,Nifty Midcap 100
+PETRONET.NS,Petronet LNG,Nifty Next 50
+PFOCUS.NS,Prime Focus,F&O
+PILANIINVS.NS,Pilani Investments,F&O
+PNBHOUSING.NS,PNB Housing Finance,F&O
+POLICYBZR.NS,PB Fintech (Policybazaar),F&O
+POLYCAB.NS,Polycab India,Nifty Next 50
+POLYMED.NS,Poly Medicure,F&O
+POWERGRID.NS,Power Grid Corp,Nifty 50
+PRAJIND.NS,Praj Industries,F&O
+PRINCEPIPE.NS,Prince Pipes & Fittings,F&O
+PRSMJOHNSN.NS,Prism Johnson,F&O
+PSB.NS,Punjab & Sind Bank,F&O
+PSPPROJECT.NS,PSP Projects,F&O
+PTC.NS,PTC India,F&O
+QUESS.NS,Quess Corp,F&O
+RALLIS.NS,Rallis India,F&O
+RASTRYA.NS,Rashtriya Chemicals & Fert,F&O
+RAYMOND.NS,Raymond Ltd,F&O
+RBLBANK.NS,RBL Bank,Nifty Midcap 100
+RECLTD.NS,REC Ltd,Nifty Next 50
+REDINGTON.NS,Redington Ltd,F&O
+RELAXO.NS,Relaxo Footwears,F&O
+REPCOHOME.NS,Repco Home Finance,F&O
+RITES.NS,RITES Ltd,F&O
+ROLEXRINGS.NS,Rolex Rings,F&O
+ROUTE.NS,Route Mobile,F&O
+RPOWER.NS,Reliance Power,F&O
+RTNINDIA.NS,RattanIndia Enterprises,F&O
+RVNL.NS,Rail Vikas Nigam Ltd,F&O
+SADBHAV.NS,Sadbhav Engineering,F&O
+SANDHAR.NS,Sandhar Technologies,F&O
+SANOFI.NS,Sanofi India,F&O
+SASKEN.NS,Sasken Technologies,F&O
+SASTASUNDR.NS,Sastasundar Ventures,F&O
+SATIN.NS,Satin Creditcare Network,F&O
+SBICARD.NS,SBI Cards & Payment,Nifty Next 50
+SBILIFE.NS,SBI Life Insurance,Nifty 50
+SCHAEFFLER.NS,Schaeffler India,F&O
+SCHNEIDER.NS,Schneider Electric Infra,F&O
+SCI.NS,Shipping Corp of India,F&O
+SDBL.NS,Som Distilleries,F&O
+SEQUENT.NS,Sequent Scientific,F&O
+SFL.NS,Sheela Foam Ltd,F&O
+SIS.NS,SIS Ltd,F&O
+SJVN.NS,SJVN Ltd,F&O
+SKFINDIA.NS,SKF India,F&O
+SOBHA.NS,Sobha Ltd,F&O
+SOLARA.NS,Solara Active Pharma,F&O
+SOLARA.NS,Solara Active Pharma Sciences,F&O
+SONACOMS.NS,Sona BLW Precision Forgings,F&O
+SPARC.NS,SUN Pharma Advanced Research,F&O
+SPICEJET.NS,SpiceJet Ltd,F&O
+SPTL.NS,Sintex Plastics,F&O
+SREINFRA.NS,SREI Infrastructure Finance,F&O
+SRF.NS,SRF Ltd,Nifty Next 50
+STARCEMENT.NS,Star Cement,F&O
+STLTECH.NS,Sterlite Technologies,F&O
+STRTECH.NS,Sterlite Technologies Ltd,F&O
+SUBEX.NS,Subex Ltd,F&O
+SUDARSCHEM.NS,Sudarshan Chemical,F&O
+SUNDRMFAST.NS,Sundram Fasteners,F&O
+SUPPETRO.NS,Supreme Petrochem,F&O
+SUPRAJIT.NS,Suprajit Engineering,F&O
