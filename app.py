@@ -44,8 +44,8 @@ def scan_stock(ticker):
             return None
         
         data = data.dropna()
-        close_prices = data['Close'].astype(float)
-        volumes = data['Volume'].astype(float)
+        close_prices = data['Close'].astype(float).squeeze()
+        volumes = data['Volume'].astype(float).squeeze()
         
         ema_20 = EMAIndicator(close=close_prices, window=20).ema_indicator()
         rsi = RSIIndicator(close=close_prices, window=14).rsi()
