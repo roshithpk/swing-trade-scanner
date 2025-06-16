@@ -27,7 +27,7 @@ CATEGORY_MAP = {
 # --- LOAD STOCKS FROM CSV ---
 @st.cache_data
 def get_stock_list():
-    url = "https://raw.githubusercontent.com/your-username/your-repo/main/stocks.csv"  # replace with your real URL
+    url = "https://raw.githubusercontent.com/roshithpk/swing-trade-scanner/main/stocks.csv"  # replace with your real URL
     df = pd.read_csv(url)
     df["Category"] = df["Ticker"].map(CATEGORY_MAP).fillna("Uncategorized")
     return df, df.set_index("Ticker").to_dict(orient="index")
