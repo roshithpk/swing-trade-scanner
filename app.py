@@ -37,8 +37,8 @@ def scan_stock(ticker):
         data = data.dropna()
         
         # Convert to float and ensure 1D array
-        close_prices = pd.Series(data['Close'].astype(float))
-        volumes = pd.Series(data['Volume'].astype(float))
+        close_prices = data['Close'].astype(float).squeeze()
+        volumes = data['Volume'].astype(float).squeeze()
         
         # Calculate indicators
         ema_20 = EMAIndicator(close=close_prices, window=20).ema_indicator()
