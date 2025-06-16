@@ -5,8 +5,8 @@ from ta.momentum import RSIIndicator
 from ta.trend import EMAIndicator
 
 # --- APP SETUP ---
-st.set_page_config(page_title="Swing Trade Scanner", layout="wide")
-st.title("📈 Swing Trade Scanner (5-10 Days)")
+st.set_page_config(page_title="Indian Swing Trade Scanner", layout="wide")
+st.title("📈 Indian Swing Trade Scanner (5-10 Days)")
 
 # --- SIDEBAR FILTERS ---
 st.sidebar.header("Filters")
@@ -14,44 +14,60 @@ min_volume = st.sidebar.slider("Min Volume (x Avg)", 1.5, 5.0, 2.0)
 rsi_low = st.sidebar.slider("Min RSI", 30, 50, 40)
 rsi_high = st.sidebar.slider("Max RSI", 60, 80, 70)
 
-# --- FETCH STOCK DATA ---
-@st.cache_data
-def get_sp500_tickers():
-    table = pd.read_html("https://en.wikipedia.org/wiki/List_of_S%26P_500_companies")
-    return table[0]["Symbol"].tolist()
+# --- INDIAN STOCK TICKERS (NSE) ---
+def get_indian_tickers():
+    return [
+        'RELIANCE.NS', 'TCS.NS', 'HDFCBANK.NS', 'INFY.NS', 'HINDUNILVR.NS',
+        'ICICIBANK.NS', 'KOTAKBANK.NS', 'BHARTIARTL.NS', 'LT.NS', 'SBIN.NS',
+        'BAJFINANCE.NS', 'HDFC.NS', 'ITC.NS', 'ASIANPAINT.NS', 'DMART.NS',
+        'MARUTI.NS', 'TITAN.NS', 'SUNPHARMA.NS', 'NESTLEIND.NS', 'ONGC.NS',
+        'ADANIENT.NS', 'ADANIPORTS.NS', 'TATASTEEL.NS', 'POWERGRID.NS', 'NTPC.NS',
+        'ULTRACEMCO.NS', 'WIPRO.NS', 'SHREECEM.NS', 'JSWSTEEL.NS', 'AXISBANK.NS'
+    ]
 
-# --- SCAN LOGIC ---
+# --- SCAN FUNCTION ---
 def scan_stock(ticker):
-    data = yf.download(ticker, period="1mo", progress=False)
-    if len(data) < 20:
+    try:
+        data = yf.download(ticker, period="1mo", progress=False)
+        
+        if data.empty or len(data) < 20:
+            return None
+            
+        data = data.dropna()
+        close_prices = data['Close'].astype('float64')
+        
+        if len(close_prices) < 20:
+            return None
+            
+        ema_20 = EMAIndicator(close=close_prices, window=20).ema_indicator()
+        rsi = RSIIndicator(close=close_prices, window=14).rsi()
+        
+        latest = data.iloc[-1]
+        avg_volume = data['Volume'].mean()
+        
+        volume_ok = latest['Volume'] > avg_volume * min_volume
+        trend_ok = latest['Close'] > ema_20.iloc[-1]
+        rsi_ok = rsi_low < rsi.iloc[-1] < rsi_high
+        breakout_ok = latest['Close'] == data['Close'].rolling(5).max().iloc[-1]
+        
+        if volume_ok and trend_ok and rsi_ok and breakout_ok:
+            return {
+                "Stock": ticker.replace(".NS", ""),
+                "Price (₹)": f"₹{latest['Close']:.2f}",
+                "Volume (x Avg)": f"{latest['Volume'] / avg_volume:.1f}",
+                "RSI": f"{rsi.iloc[-1]:.1f}",
+                "Trend": "🟢" if trend_ok else "🔴",
+                "Why Buy?": "📈 Breakout + Volume Spike"
+            }
+    except Exception as e:
+        st.error(f"Error scanning {ticker}: {str(e)}")
         return None
-    
-    # Calculate indicators
-    data["EMA_20"] = EMAIndicator(data["Close"], 20).ema_indicator()
-    data["RSI"] = RSIIndicator(data["Close"], 14).rsi()
-    avg_volume = data["Volume"].mean()
-    latest = data.iloc[-1]
-    
-    # Check conditions
-    volume_ok = latest["Volume"] > avg_volume * min_volume
-    trend_ok = latest["Close"] > latest["EMA_20"]
-    rsi_ok = rsi_low < latest["RSI"] < rsi_high
-    breakout_ok = latest["Close"] == data["Close"].rolling(5).max().iloc[-1]
-    
-    if volume_ok and trend_ok and rsi_ok and breakout_ok:
-        return {
-            "Ticker": ticker,
-            "Price": f"${latest['Close']:.2f}",
-            "Volume (x Avg)": f"{latest['Volume'] / avg_volume:.1f}",
-            "RSI": f"{latest['RSI']:.1f}",
-            "Why Buy?": "📈 Breakout + Volume Spike"
-        }
 
 # --- RUN SCAN ---
-if st.button("Scan S&P 500 Stocks"):
-    with st.spinner("Scanning..."):
+if st.button("Scan Indian Stocks"):
+    with st.spinner("Scanning NSE stocks..."):
         results = []
-        for ticker in get_sp500_tickers()[:50]:  # Scan first 50 for speed
+        for ticker in get_indian_tickers():
             result = scan_stock(ticker)
             if result:
                 results.append(result)
@@ -59,8 +75,8 @@ if st.button("Scan S&P 500 Stocks"):
     if results:
         st.dataframe(pd.DataFrame(results), hide_index=True)
     else:
-        st.warning("No stocks match criteria. Adjust filters.")
+        st.warning("No stocks match criteria. Try adjusting filters.")
 
 # --- FOOTER ---
 st.markdown("---")
-st.caption("⚡ Powered by Yahoo Finance + Streamlit")
+st.caption("⚡ Powered by Yahoo Finance + Streamlit | Data: NSE (India)")
