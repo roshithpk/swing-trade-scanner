@@ -88,4 +88,4 @@ if st.button("Scan Indian Stocks"):
 
 # --- FOOTER ---
 st.markdown("---")
-st.caption("⚡ Powered by Yahoo Finance + Streamlit | Data: NSE (India)")
+st.caption("⚡ Developed by Roshith | Data: NSE (India)")
