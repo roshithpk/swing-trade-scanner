@@ -8,33 +8,39 @@ from ta.trend import EMAIndicator
 st.set_page_config(page_title="Indian Swing Trade Scanner", layout="wide")
 st.title("📈 Indian Swing Trade Scanner (5-10 Days)")
 
-# --- LOAD STOCKS CSV ---
-@st.cache_data
-def load_stocks():
-    # Replace the path below with your local path or GitHub raw URL if hosted online
-    # Example for GitHub raw: 'https://raw.githubusercontent.com/roshithpk/swing-trade-scanner/main/stocks.csv'
-    csv_path = 'stocks.csv'  # local file path
-    df = pd.read_csv(csv_path)
-    return df
-
-stocks_df = load_stocks()
-
 # --- SIDEBAR FILTERS ---
 st.sidebar.header("Filters")
-
-# Category filter dropdown
-categories = ['All'] + sorted(stocks_df['Category'].unique().tolist())
-selected_category = st.sidebar.selectbox("Select Stock Category", categories)
-
-# Filter DataFrame based on category
-if selected_category != 'All':
-    filtered_stocks = stocks_df[stocks_df['Category'] == selected_category]
-else:
-    filtered_stocks = stocks_df.copy()
-
 min_volume = st.sidebar.slider("Min Volume (x Avg)", 1.5, 5.0, 2.0)
 rsi_low = st.sidebar.slider("Min RSI", 30, 50, 40)
 rsi_high = st.sidebar.slider("Max RSI", 60, 80, 70)
+
+# --- CATEGORY MAP (MANUAL) ---
+CATEGORY_MAP = {
+    "RELIANCE.NS": "Nifty 50",
+    "TCS.NS": "Nifty 50",
+    "TATAMOTORS.NS": "Nifty 50",
+    "HINDPETRO.NS": "Midcap 100",
+    "LTI.NS": "Next 50",
+    # Add the rest here...
+}
+
+# --- LOAD STOCKS FROM CSV ---
+@st.cache_data
+def get_stock_list():
+    url = "https://raw.githubusercontent.com/your-username/your-repo/main/stocks.csv"  # replace with your real URL
+    df = pd.read_csv(url)
+    df["Category"] = df["Ticker"].map(CATEGORY_MAP).fillna("Uncategorized")
+    return df, df.set_index("Ticker").to_dict(orient="index")
+
+stock_df, stock_meta = get_stock_list()
+
+# --- CATEGORY FILTER ---
+all_categories = sorted(stock_df["Category"].unique())
+selected_categories = st.sidebar.multiselect("Select Categories", options=all_categories, default=all_categories)
+
+# Filter stock list
+filtered_df = stock_df[stock_df["Category"].isin(selected_categories)]
+stock_list = filtered_df["Ticker"].tolist()
 
 # --- SCAN FUNCTION ---
 def scan_stock(ticker):
@@ -42,8 +48,8 @@ def scan_stock(ticker):
         data = yf.download(ticker, period="1mo", progress=False)
         if data.empty or len(data) < 20:
             return None
-        data = data.dropna()
 
+        data = data.dropna()
         close_prices = pd.Series(data['Close'].astype(float))
         volumes = pd.Series(data['Volume'].astype(float))
 
@@ -54,38 +60,42 @@ def scan_stock(ticker):
         latest_volume = volumes.iloc[-1]
         avg_volume = volumes.mean()
 
-        volume_ok = (latest_volume > avg_volume * min_volume)
-        trend_ok = (latest_close > ema_20.iloc[-1])
-        rsi_ok = (rsi_low < rsi.iloc[-1] < rsi_high)
-        breakout_ok = (latest_close == close_prices.rolling(5).max().iloc[-1])
+        volume_ok = latest_volume > avg_volume * min_volume
+        trend_ok = latest_close > ema_20.iloc[-1]
+        rsi_ok = rsi_low < rsi.iloc[-1] < rsi_high
+        breakout_ok = latest_close == close_prices.rolling(5).max().iloc[-1]
 
         if all([volume_ok, trend_ok, rsi_ok, breakout_ok]):
+            meta = stock_meta.get(ticker, {})
             return {
                 "Stock": ticker.replace(".NS", ""),
+                "Name": meta.get("Name", ""),
                 "Price (₹)": f"₹{latest_close:.2f}",
-                "Volume (x Avg)": f"{latest_volume/avg_volume:.1f}",
+                "Volume (x)": f"{latest_volume/avg_volume:.1f}",
                 "RSI": f"{rsi.iloc[-1]:.1f}",
                 "Trend": "🟢",
+                "Category": meta.get("Category", "—"),
                 "Why Buy?": "📈 Breakout + Volume Spike"
             }
     except Exception as e:
         st.error(f"Error scanning {ticker}: {str(e)}")
         return None
 
-# --- RUN SCAN ---
-if st.button("Scan Indian Stocks"):
-    with st.spinner("Scanning selected stocks..."):
+# --- SCAN BUTTON ---
+if st.button("🔍 Scan Indian Stocks"):
+    with st.spinner(f"Scanning {len(stock_list)} selected stocks..."):
         results = []
-        for ticker in filtered_stocks['Ticker']:
+        for ticker in stock_list:
             result = scan_stock(ticker)
             if result:
                 results.append(result)
 
     if results:
+        st.success(f"✅ Found {len(results)} stocks matching criteria")
         st.dataframe(pd.DataFrame(results), hide_index=True)
     else:
-        st.warning("No stocks match criteria. Try adjusting filters.")
+        st.warning("⚠️ No stocks match the selected filters.")
 
 # --- FOOTER ---
 st.markdown("---")
-st.caption("⚡ Powered by Yahoo Finance + Streamlit | Data: NSE (India)")
+st.caption("⚡
