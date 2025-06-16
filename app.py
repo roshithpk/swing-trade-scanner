@@ -11,14 +11,19 @@ st.title("📈 Indian Swing Trade Scanner (5-10 Days)")
 # --- LOAD STOCK LIST ---
 @st.cache_data
 def load_stocks():
-    df = pd.read_csv("stocks.csv")  # Ensure this file is in the same directory
+    df = pd.read_csv("stocks.csv")  # Must have columns: Ticker, Name, Category
     return df, df['Ticker'].dropna().unique().tolist()
 
-stock_df, stock_list = load_stocks()
+stock_df, all_tickers = load_stocks()
 
 # --- SIDEBAR FILTERS ---
 st.sidebar.header("📊 Filters")
 
+# Category filter
+categories = sorted(stock_df['Category'].dropna().unique())
+selected_categories = st.sidebar.multiselect("Select Stock Categories", categories, default=categories)
+
+# Other filters
 min_volume = st.sidebar.slider("Min Volume (x Avg)", 1.0, 5.0, 2.0, step=0.1)
 rsi_low = st.sidebar.slider("Min RSI", 10, 50, 40)
 rsi_high = st.sidebar.slider("Max RSI", 50, 90, 70)
@@ -27,17 +32,20 @@ max_price = st.sidebar.slider("Max Price (₹)", 200, 10000, 3000)
 breakout_required = st.sidebar.checkbox("📈 Require 5-Day High Breakout", value=True)
 trend_required = st.sidebar.checkbox("🟢 Price Above 20 EMA", value=True)
 
-# --- STOCK SCAN FUNCTION ---
+# --- FILTERED TICKERS ---
+filtered_df = stock_df[stock_df['Category'].isin(selected_categories)]
+filtered_tickers = filtered_df['Ticker'].tolist()
+
+# --- SCAN FUNCTION ---
 def scan_stock(ticker, apply_filters=True):
     try:
         data = yf.download(ticker, period="1mo", progress=False)
-
         if data.empty or len(data) < 20:
             return None
 
         data = data.dropna()
-        close_prices = data['Close'].astype(float).squeeze()
-        volumes = data['Volume'].astype(float).squeeze()
+        close_prices = pd.Series(data['Close']).astype(float).squeeze()
+        volumes = pd.Series(data['Volume']).astype(float).squeeze()
 
         ema_20 = EMAIndicator(close=close_prices, window=20).ema_indicator()
         rsi = RSIIndicator(close=close_prices, window=14).rsi()
@@ -89,11 +97,11 @@ def scan_stock(ticker, apply_filters=True):
         st.error(f"Error scanning {ticker}: {str(e)}")
         return None
 
-# --- MAIN STOCK SCAN ---
-if st.button("🔍 Scan All Stocks"):
+# --- SCAN ALL STOCKS ---
+if st.button("🔍 Scan Selected Stocks"):
     with st.spinner("Scanning stocks..."):
         results = []
-        for ticker in stock_list:
+        for ticker in filtered_tickers:
             result = scan_stock(ticker, apply_filters=True)
             if result:
                 results.append(result)
@@ -104,7 +112,7 @@ if st.button("🔍 Scan All Stocks"):
     else:
         st.warning("❌ No stocks match the selected filters.")
 
-# --- USER STOCK ANALYSIS ---
+# --- ANALYZE A SPECIFIC STOCK ---
 st.markdown("---")
 st.subheader("🔎 Analyze a Specific Stock (No Filters)")
 user_input = st.text_input("Enter stock symbol (e.g., INFY):")
@@ -122,4 +130,4 @@ if user_input:
 
 # --- FOOTER ---
 st.markdown("---")
-st.caption("⚡ Developed by Roshith P K + Streamlit | Data: NSE India")
+st.caption("⚡ Powered by Yahoo Finance + Streamlit | Data: NSE India")
