@@ -29,7 +29,7 @@ trend_required = st.sidebar.checkbox("🟢 Price Above 20 EMA", value=True)
 # --- INDIAN STOCK TICKERS (NSE) ---
 @st.cache_data
 def get_indian_tickers():
-    url = "https://raw.githubusercontent.com/your-username/your-repo/main/stocks.csv"
+    url = "https://raw.githubusercontent.com/roshithpk/swing-trade-scanner/main/stocks.csv"
     df = pd.read_csv(url)
     return df['Ticker'].dropna().tolist()
 
