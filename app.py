@@ -3,7 +3,6 @@ import pandas as pd
 import streamlit as st
 from ta.momentum import RSIIndicator
 from ta.trend import EMAIndicator
-import numpy as np
 
 # --- APP SETUP ---
 st.set_page_config(page_title="Indian Swing Trade Scanner", layout="wide")
@@ -20,8 +19,8 @@ def get_indian_tickers():
     return [
         'RELIANCE.NS', 'TCS.NS', 'HDFCBANK.NS', 'INFY.NS', 'HINDUNILVR.NS',
         'ICICIBANK.NS', 'KOTAKBANK.NS', 'BHARTIARTL.NS', 'LT.NS', 'SBIN.NS',
-        'BAJFINANCE.NS', 'HDFC.NS', 'ITC.NS', 'ASIANPAINT.NS', 'DMART.NS',
-        'MARUTI.NS', 'TITAN.NS', 'SUNPHARMA.NS', 'NESTLEIND.NS', 'ONGC.NS'
+        'BAJFINANCE.NS', 'ITC.NS', 'ASIANPAINT.NS', 'DMART.NS', 'MARUTI.NS',
+        'TITAN.NS', 'SUNPHARMA.NS', 'NESTLEIND.NS', 'ONGC.NS', 'HDFC.NS'
     ]
 
 # --- FIXED SCAN FUNCTION ---
@@ -36,29 +35,33 @@ def scan_stock(ticker):
             
         # Clean data
         data = data.dropna()
-        close_prices = data['Close'].values.flatten()  # Convert to 1D array
         
-        # Calculate indicators (with proper 1D data)
-        ema_20 = EMAIndicator(close=pd.Series(close_prices), window=20).ema_indicator()
-        rsi = RSIIndicator(close=pd.Series(close_prices), window=14).rsi()
+        # Convert to float and ensure 1D array
+        close_prices = pd.Series(data['Close'].astype(float))
+        volumes = pd.Series(data['Volume'].astype(float))
+        
+        # Calculate indicators
+        ema_20 = EMAIndicator(close=close_prices, window=20).ema_indicator()
+        rsi = RSIIndicator(close=close_prices, window=14).rsi()
         
         # Get latest values
-        latest = data.iloc[-1]
-        avg_volume = data['Volume'].mean()
+        latest_close = close_prices.iloc[-1]
+        latest_volume = volumes.iloc[-1]
+        avg_volume = volumes.mean()
         
-        # Check conditions
-        volume_ok = latest['Volume'] > avg_volume * min_volume
-        trend_ok = latest['Close'] > ema_20.iloc[-1]
-        rsi_ok = rsi_low < rsi.iloc[-1] < rsi_high
-        breakout_ok = latest['Close'] == data['Close'].rolling(5).max().iloc[-1]
+        # Check conditions (using .iloc[-1] for single value comparison)
+        volume_ok = (latest_volume > avg_volume * min_volume)
+        trend_ok = (latest_close > ema_20.iloc[-1])
+        rsi_ok = (rsi_low < rsi.iloc[-1] < rsi_high)
+        breakout_ok = (latest_close == close_prices.rolling(5).max().iloc[-1])
         
-        if volume_ok and trend_ok and rsi_ok and breakout_ok:
+        if all([volume_ok, trend_ok, rsi_ok, breakout_ok]):
             return {
                 "Stock": ticker.replace(".NS", ""),
-                "Price (₹)": f"₹{latest['Close']:.2f}",
-                "Volume (x)": f"{latest['Volume']/avg_volume:.1f}",
+                "Price (₹)": f"₹{latest_close:.2f}",
+                "Volume (x)": f"{latest_volume/avg_volume:.1f}",
                 "RSI": f"{rsi.iloc[-1]:.1f}",
-                "Trend": "🟢" if trend_ok else "🔴",
+                "Trend": "🟢",
                 "Why Buy?": "📈 Breakout + Volume Spike"
             }
     except Exception as e:
