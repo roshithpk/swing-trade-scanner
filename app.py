@@ -27,13 +27,11 @@ breakout_required = st.sidebar.checkbox("📈 Require 5-Day High Breakout", valu
 trend_required = st.sidebar.checkbox("🟢 Price Above 20 EMA", value=True)
 
 # --- INDIAN STOCK TICKERS (NSE) ---
+@st.cache_data
 def get_indian_tickers():
-    return [
-        'RELIANCE.NS', 'TCS.NS', 'HDFCBANK.NS', 'INFY.NS', 'HINDUNILVR.NS',
-        'ICICIBANK.NS', 'KOTAKBANK.NS', 'BHARTIARTL.NS', 'LT.NS', 'SBIN.NS',
-        'BAJFINANCE.NS', 'ITC.NS', 'ASIANPAINT.NS', 'DMART.NS', 'MARUTI.NS',
-        'TITAN.NS', 'SUNPHARMA.NS', 'NESTLEIND.NS', 'ONGC.NS', 'HDFC.NS'
-    ]
+    url = "https://raw.githubusercontent.com/your-username/your-repo/main/stocks.csv"
+    df = pd.read_csv(url)
+    return df['Ticker'].dropna().tolist()
 
 # --- SCAN FUNCTION ---
 def scan_stock(ticker):
