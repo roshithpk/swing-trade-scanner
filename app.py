@@ -8,45 +8,48 @@ from ta.trend import EMAIndicator
 st.set_page_config(page_title="Indian Swing Trade Scanner", layout="wide")
 st.title("📈 Indian Swing Trade Scanner (5-10 Days)")
 
-# --- LOAD STOCK LIST FROM CSV ---
+# --- LOAD STOCKS FROM LOCAL CSV ---
 @st.cache_data
-def load_stocks():
-    df = pd.read_csv("stocks.csv")  # Ensure the file is present in the same directory
-    return df['Ticker'].dropna().unique().tolist()
+def load_stock_dataframe():
+    df = pd.read_csv("stocks.csv")
+    return df
 
-stock_list = load_stocks()
-
-stock_df = load_stocks()
-stock_list = stock_df["Ticker"].dropna().unique().tolist()
+stock_df = load_stock_dataframe()
 
 # --- SIDEBAR FILTERS ---
-with st.sidebar:
-    st.header("🔍 Filters")
-    st.markdown("Adjust filters to find high-probability swing setups.")
+st.sidebar.header("Filters")
 
-    min_volume = st.slider("Min Volume (x Avg)", 1.5, 5.0, 2.0, step=0.1)
-    rsi_low = st.slider("Min RSI", 30, 50, 40)
-    rsi_high = st.slider("Max RSI", 60, 80, 70)
-    min_price = st.slider("Min Price (₹)", 10, 1000, 100)
-    max_price = st.slider("Max Price (₹)", 200, 10000, 3000)
+# Category filter
+categories = ["All"] + sorted(stock_df['Category'].dropna().unique().tolist())
+selected_category = st.sidebar.selectbox("📊 Stock Category", categories)
 
-    breakout_required = st.checkbox("📈 Require 5-Day High Breakout", value=True)
-    trend_required = st.checkbox("🟢 Price Above 20 EMA", value=True)
+# Filter by category
+if selected_category == "All":
+    stock_list = stock_df["Ticker"].dropna().unique().tolist()
+else:
+    stock_list = stock_df[stock_df["Category"] == selected_category]["Ticker"].dropna().unique().tolist()
 
-    st.markdown("---")
-    manual_ticker = st.text_input("🔎 Check Specific Stock (e.g., INFY)").upper()
-    check_button = st.button("Check Stock")
+# RSI and Volume filters
+min_volume = st.sidebar.slider("Min Volume (x Avg)", 1.5, 5.0, 2.0)
+rsi_low = st.sidebar.slider("Min RSI", 30, 50, 40)
+rsi_high = st.sidebar.slider("Max RSI", 60, 80, 70)
+min_price = st.sidebar.slider("Min Price (₹)", 10, 1000, 100)
+max_price = st.sidebar.slider("Max Price (₹)", 200, 10000, 3000)
+
+# Toggle filters
+breakout_required = st.sidebar.checkbox("📈 Require 5-Day High Breakout", value=True)
+trend_required = st.sidebar.checkbox("🟢 Price Above 20 EMA", value=True)
 
 # --- ANALYSIS FUNCTION ---
-def analyze_stock(ticker):
+def scan_stock(ticker, apply_filters=True):
     try:
         data = yf.download(ticker, period="1mo", progress=False)
         if data.empty or len(data) < 20:
             return None
-
         data = data.dropna()
-        close_prices = data['Close'].astype(float)
-        volumes = data['Volume'].astype(float)
+        
+        close_prices = pd.Series(data['Close'].astype(float))
+        volumes = pd.Series(data['Volume'].astype(float))
 
         ema_20 = EMAIndicator(close=close_prices, window=20).ema_indicator()
         rsi = RSIIndicator(close=close_prices, window=14).rsi()
@@ -55,72 +58,76 @@ def analyze_stock(ticker):
         latest_volume = volumes.iloc[-1]
         avg_volume = volumes.mean()
 
-        reason = []
-        is_buy = True
+        volume_ok = latest_volume > avg_volume * min_volume
+        trend_ok = latest_close > ema_20.iloc[-1]
+        rsi_ok = rsi_low < rsi.iloc[-1] < rsi_high
+        breakout_ok = latest_close == close_prices.rolling(5).max().iloc[-1]
+        price_ok = min_price <= latest_close <= max_price
 
-        if latest_close < min_price or latest_close > max_price:
-            reason.append("Price not within desired swing trading range")
-            is_buy = False
-        if latest_volume < avg_volume * min_volume:
-            reason.append("Volume below minimum average threshold")
-            is_buy = False
-        if rsi.iloc[-1] < rsi_low:
-            reason.append("RSI indicates weak momentum")
-            is_buy = False
-        elif rsi.iloc[-1] > rsi_high:
-            reason.append("RSI indicates overbought condition")
-            is_buy = False
-        if trend_required and latest_close < ema_20.iloc[-1]:
-            reason.append("Price is in a downtrend (below 20 EMA)")
-            is_buy = False
-        if breakout_required and latest_close < close_prices.rolling(5).max().iloc[-1]:
-            reason.append("Not near 5-day high breakout level")
-            is_buy = False
+        reasons = []
+        if trend_ok:
+            reasons.append("🟢 Price > EMA20")
+        else:
+            reasons.append("🔴 Below EMA20")
 
-        remarks = (
-            "✅ Good for Swing Trade – meets all key conditions"
-            if is_buy else
-            "❌ Not ideal – " + ", ".join(reason)
-        )
+        if breakout_ok:
+            reasons.append("📈 5-Day Breakout")
+        if volume_ok:
+            reasons.append("🔥 Volume Spike")
+        if not rsi_ok:
+            reasons.append("❌ RSI out of range")
 
-        return {
-            "Stock": ticker.replace(".NS", ""),
-            "Price (₹)": f"₹{latest_close:.2f}",
-            "Volume (x)": f"{latest_volume/avg_volume:.1f}",
-            "RSI": f"{rsi.iloc[-1]:.1f}",
-            "Trend": "🟢" if latest_close > ema_20.iloc[-1] else "🔴",
-            "Remarks": remarks
-        }
+        if apply_filters:
+            if all([volume_ok, trend_ok if trend_required else True, rsi_ok, breakout_ok if breakout_required else True, price_ok]):
+                return {
+                    "Stock": ticker.replace(".NS", ""),
+                    "Price (₹)": f"₹{latest_close:.2f}",
+                    "Volume (x)": f"{latest_volume / avg_volume:.1f}",
+                    "RSI": f"{rsi.iloc[-1]:.1f}",
+                    "Trend": "🟢" if trend_ok else "🔴",
+                    "Why Buy?": " + ".join(reasons)
+                }
+        else:
+            return {
+                "Stock": ticker.replace(".NS", ""),
+                "Price (₹)": f"₹{latest_close:.2f}",
+                "Volume (x)": f"{latest_volume / avg_volume:.1f}",
+                "RSI": f"{rsi.iloc[-1]:.1f}",
+                "Trend": "🟢" if trend_ok else "🔴",
+                "Why Buy?": " + ".join(reasons) if trend_ok or breakout_ok or volume_ok else "No strong swing signal"
+            }
     except Exception as e:
         st.error(f"Error scanning {ticker}: {str(e)}")
         return None
 
-# --- MANUAL STOCK CHECK ---
-if check_button and manual_ticker:
-    ticker_symbol = manual_ticker if manual_ticker.endswith(".NS") else manual_ticker + ".NS"
-    stock_result = analyze_stock(ticker_symbol)
-    if stock_result:
-        st.subheader(f"🧾 Result for {manual_ticker}")
-        st.dataframe(pd.DataFrame([stock_result]), hide_index=True)
-    else:
-        st.warning("Unable to fetch or analyze data for the provided ticker.")
-
-# --- RUN BULK SCAN ---
-if st.button("🚀 Scan All Stocks"):
-    with st.spinner("Scanning NSE stocks..."):
+# --- RUN SCAN ---
+if st.button("🔍 Scan Stocks"):
+    with st.spinner("Scanning selected stocks..."):
         results = []
-        for symbol in stock_list:
-            ticker = symbol if symbol.endswith(".NS") else symbol + ".NS"
-            result = analyze_stock(ticker)
-            if result and "✅" in result["Remarks"]:
+        for ticker in stock_list:
+            result = scan_stock(ticker, apply_filters=True)
+            if result:
                 results.append(result)
 
     if results:
-        st.subheader("📊 Swing Trade Opportunities")
-        st.dataframe(pd.DataFrame(results), hide_index=True)
+        st.success(f"✅ {len(results)} stocks matched your criteria.")
+        st.dataframe(pd.DataFrame(results), hide_index=True, use_container_width=True)
     else:
-        st.warning("No stocks matched your criteria. Try adjusting the filters.")
+        st.warning("No stocks match your filters. Try adjusting the sliders.")
+
+# --- SINGLE STOCK LOOKUP ---
+st.markdown("---")
+st.subheader("🔎 Analyze a Specific Stock")
+
+stock_input = st.text_input("Enter NSE Stock Symbol (e.g., INFY.NS)", value="")
+
+if stock_input:
+    result = scan_stock(stock_input.strip().upper(), apply_filters=False)
+    if result:
+        st.dataframe(pd.DataFrame([result]), hide_index=True, use_container_width=True)
+    else:
+        st.error("❌ Unable to analyze this stock or no data available.")
 
 # --- FOOTER ---
 st.markdown("---")
-st.caption("⚡ Built with Streamlit, Yahoo Finance, and love ❤️ | Data: NSE")
+st.caption("⚡ Powered by Yahoo Finance + Streamlit | Built for Indian Swing Traders")
