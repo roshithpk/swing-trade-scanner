@@ -47,8 +47,8 @@ def scan_stock(ticker):
             return None
 
         data = data.dropna()
-        close_prices = pd.Series(data["Close"]).astype(float).squeeze()
-        volumes = pd.Series(data["Volume"]).astype(float).squeeze()
+        close_prices = pd.Series(data["Close"].values.flatten(), dtype=float)
+        volumes = pd.Series(data["Volume"].values.flatten(), dtype=float)
 
         if close_prices.empty or volumes.empty:
             return None
