@@ -36,6 +36,7 @@ def run_ai_prediction():
             y = recent_data["Close"].to_numpy().flatten()  # Ensure 1D
             
             # Debugging
+            st.write("🚀 AI Prediction block triggered")
             st.write("📊 X shape:", X.shape)
             st.write("📉 y shape:", y.shape)
             st.write("✅ X preview:", X[:5])
