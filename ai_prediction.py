@@ -1,113 +1,96 @@
- import streamlit as st
+import streamlit as st
 import yfinance as yf
 import pandas as pd
 import numpy as np
 from sklearn.linear_model import LinearRegression
+import matplotlib.pyplot as plt
 import plotly.graph_objects as go
 from datetime import timedelta
 
+
 def run_ai_prediction():
-    st.header("🧠 AI-Based Price Prediction")
-    st.subheader("📌 Enter Stock Symbol (NSE) for Prediction")
+    st.markdown("---")
+    st.subheader("🧠 AI-Based Stock Price Prediction")
+    st.caption("Use AI to forecast closing prices for the next few days")
 
-    stock_symbol = st.text_input("Enter Stock Symbol (e.g., INFY):")
-    forecast_days = st.slider("Days to Forecast", 1, 14, 7)
+    stock_input = st.text_input("Enter NSE Stock Symbol (e.g., INFY)", key="ai_stock_input")
+    forecast_days = st.slider("Select forecast period (days)", 1, 15, 5, key="forecast_slider")
 
-    if stock_symbol:
-        full_ticker = stock_symbol.upper().strip() + ".NS"
+    if stock_input:
         try:
+            full_ticker = stock_input.upper().strip() + ".NS"
             data = yf.download(full_ticker, period="6mo", progress=False)
+
             if data.empty or len(data) < 30:
                 st.warning("⚠️ Not enough data for prediction.")
                 return
-            
-            # ✅ Reset index to make 'Date' a proper column
+
             df = data.copy()
             df.reset_index(inplace=True)
             df = df[["Date", "Open", "High", "Low", "Close"]].dropna()
-            
+
             df["Date"] = pd.to_datetime(df["Date"])
             df["Days"] = (df["Date"] - df["Date"].min()).dt.days
 
-            # MODEL
-            X = df[["Days"]]
-            y = df[["Close"]]
+            # Prepare input for model
+            X = df[["Days"]].values
+            y = df[["Close"]].values
 
-            st.write(f"📊 X shape: {X.shape}")
-            st.write(f"📉 y shape: {y.shape}")
+            st.write(f"\U0001F4CA X shape: {X.shape}")
+            st.write(f"\U0001F4C9 y shape: {y.shape}")
 
+            # Train the model
             model = LinearRegression()
             model.fit(X, y)
 
-            # Predict future
             last_day = df["Days"].iloc[-1]
             future_days = np.array([last_day + i for i in range(1, forecast_days + 1)]).reshape(-1, 1)
-            future_dates = [df["Date"].max() + timedelta(days=i) for i in range(1, forecast_days + 1)]
-            predictions = model.predict(future_days).flatten()
+            future_dates = [df["Date"].iloc[-1] + timedelta(days=i) for i in range(1, forecast_days + 1)]
 
+            future_preds = model.predict(future_days).flatten()
+
+            # Create forecast DataFrame
             forecast_df = pd.DataFrame({
                 "Date": future_dates,
-                "Predicted": predictions
+                "Predicted Close": future_preds
             })
 
-            merged = pd.merge(df, forecast_df, on="Date", how="outer")
+            # Display table
+            st.markdown("#### 📊 AI Forecast Table")
+            st.dataframe(forecast_df.style.format({"Predicted Close": "₹{:.2f}"}), hide_index=True)
 
-            # Debug output
-            st.write("📊 Shape of df (historical):", df.shape)
-            st.write("📊 Shape of forecast_df:", forecast_df.shape)
-            st.write("📊 Sample forecast_df:", forecast_df.tail(3))
-            st.write("📊 Sample merged:", merged.tail(3))
-
-            pred_range = merged[merged["Predicted"].notnull() & (merged["Date"] > df["Date"].max())]
-
-            st.write("📊 pred_range shape:", pred_range.shape)
-            st.write("📊 pred_range.dtypes:", pred_range.dtypes)
-            st.write("📊 pred_range sample:", pred_range.tail(3))
-
-            # PLOT
+            # Plot candlestick chart + predicted line
+            st.markdown("#### 📈 Price Chart with AI Forecast")
             fig = go.Figure()
 
-            # Add candlestick chart for historical
+            # Historical candlestick
             fig.add_trace(go.Candlestick(
                 x=df["Date"],
                 open=df["Open"],
                 high=df["High"],
                 low=df["Low"],
                 close=df["Close"],
-                name="Historical"
+                name="Actual"
             ))
 
-            # Add prediction line
-            x_vals = pred_range["Date"]
-            y_vals = pred_range["Predicted"]
-
-            st.write("✅ X values type:", type(x_vals), "Shape:", x_vals.shape)
-            st.write("✅ Y values type:", type(y_vals), "Shape:", y_vals.shape)
-
+            # Forecast line
             fig.add_trace(go.Scatter(
-                x=x_vals,
-                y=y_vals,
-                mode='lines+markers',
-                name="Predicted",
-                line=dict(color='blue', dash="dot")
+                x=forecast_df["Date"],
+                y=forecast_df["Predicted Close"],
+                mode="lines+markers",
+                name="AI Forecast",
+                line=dict(color="orange", width=2, dash="dash")
             ))
 
-            fig.update_layout(title="📈 AI Price Prediction (Linear Regression)",
-                              xaxis_title="Date",
-                              yaxis_title="Price",
-                              xaxis_rangeslider_visible=False)
+            fig.update_layout(
+                xaxis_title="Date",
+                yaxis_title="Price (₹)",
+                template="plotly_white",
+                showlegend=True,
+                height=500
+            )
 
             st.plotly_chart(fig, use_container_width=True)
 
-            # Result Table
-            st.subheader("📋 Predicted Trend")
-            entry_price = df["Close"].iloc[-1]
-            exit_price = predictions[-1]
-            st.table(pd.DataFrame([{
-                "Entry Price (Today)": round(entry_price, 2),
-                f"Exit Price (After {forecast_days} Days)": round(exit_price, 2),
-                "Trend": "📈 Up" if exit_price > entry_price else "📉 Down"
-            }]))
-
         except Exception as e:
-            st.error(f"Error during AI prediction: {e}")
+            st.error(f"Error during AI prediction: {str(e)}")
