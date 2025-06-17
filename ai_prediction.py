@@ -22,64 +22,44 @@ def prepare_lstm_data(data, n_steps=30):
 
 # --- TECHNICAL INDICATORS ---
 def add_technical_indicators(df):
-    # Ensure we're working with proper 1D numpy arrays
-    close = df['Close'].values.ravel() if isinstance(df['Close'], (pd.DataFrame, pd.Series)) else df['Close']
-    high = df['High'].values.ravel() if isinstance(df['High'], (pd.DataFrame, pd.Series)) else df['High']
-    low = df['Low'].values.ravel() if isinstance(df['Low'], (pd.DataFrame, pd.Series)) else df['Low']
-    volume = df['Volume'].values.ravel() if isinstance(df['Volume'], (pd.DataFrame, pd.Series)) else df['Volume']
+    # Ensure we're working with proper Series objects
+    close_prices = df['Close'].squeeze() if isinstance(df['Close'], pd.DataFrame) else df['Close']
+    high_prices = df['High'].squeeze() if isinstance(df['High'], pd.DataFrame) else df['High']
+    low_prices = df['Low'].squeeze() if isinstance(df['Low'], pd.DataFrame) else df['Low']
     
-    try:
-        # Momentum Indicators
-        df['RSI'] = RSIIndicator(close=close, window=14).rsi()
-        
-        stoch = StochasticOscillator(
-            high=high,
-            low=low,
-            close=close,
-            window=14,
-            smooth_window=3
-        )
-        df['Stoch_%K'] = stoch.stoch()
-        df['Stoch_%D'] = stoch.stoch_signal()
-        
-        # Trend Indicators
-        df['EMA_20'] = EMAIndicator(close=close, window=20).ema_indicator()
-        df['EMA_50'] = EMAIndicator(close=close, window=50).ema_indicator()
-        
-        macd = MACD(close=close)
-        df['MACD'] = macd.macd()
-        df['MACD_Signal'] = macd.macd_signal()
-        
-        df['ADX'] = ADXIndicator(
-            high=high,
-            low=low,
-            close=close,
-            window=14
-        ).adx()
-        
-        # Volatility Indicators
-        bb = BollingerBands(
-            close=close,
-            window=20,
-            window_dev=2
-        )
-        df['BB_Upper'] = bb.bollinger_hband()
-        df['BB_Lower'] = bb.bollinger_lband()
-        
-        # Volume Indicators
-        df['VWAP'] = VolumeWeightedAveragePrice(
-            high=high,
-            low=low,
-            close=close,
-            volume=volume,
-            window=14
-        ).volume_weighted_average_price()
-        
-        return df.dropna()
+    # Momentum Indicators
+    df['RSI'] = RSIIndicator(close=close_prices, window=14).rsi()
+    stoch = StochasticOscillator(high=high_prices, 
+                               low=low_prices, 
+                               close=close_prices, 
+                               window=14)
+    df['Stoch_%K'] = stoch.stoch()
+    df['Stoch_%D'] = stoch.stoch_signal()
     
-    except Exception as e:
-        st.error(f"Error calculating technical indicators: {str(e)}")
-        return df
+    # Trend Indicators
+    df['EMA_20'] = EMAIndicator(close=close_prices, window=20).ema_indicator()
+    df['EMA_50'] = EMAIndicator(close=close_prices, window=50).ema_indicator()
+    macd = MACD(close=close_prices)
+    df['MACD'] = macd.macd()
+    df['MACD_Signal'] = macd.macd_signal()
+    df['ADX'] = ADXIndicator(high=high_prices, 
+                           low=low_prices, 
+                           close=close_prices, 
+                           window=14).adx()
+    
+    # Volatility Indicators
+    bb = BollingerBands(close=close_prices, window=20, window_dev=2)
+    df['BB_Upper'] = bb.bollinger_hband()
+    df['BB_Lower'] = bb.bollinger_lband()
+    
+    # Volume Indicators
+    df['VWAP'] = VolumeWeightedAveragePrice(high=high_prices,
+                                          low=low_prices,
+                                          close=close_prices,
+                                          volume=df['Volume'],
+                                          window=14).volume_weighted_average_price()
+    
+    return df.dropna()
 
 # --- TRADING SIGNAL GENERATION ---
 def generate_signals(df, forecast):
