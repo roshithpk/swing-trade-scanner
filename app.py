@@ -4,6 +4,10 @@ import yfinance as yf
 from ta.momentum import RSIIndicator
 from ta.trend import EMAIndicator
 
+if st.button("🔮 AI-Based Prediction"):
+    st.session_state["ai_mode"] = True
+    st.experimental_rerun()
+
 # --- APP SETUP ---
 st.set_page_config(page_title="📊 Indian Swing Trade Scanner", layout="wide")
 st.title("📈 Indian Swing Trade Scanner (5-10 Days)")
@@ -142,9 +146,7 @@ if user_stock:
     except Exception as e:
         st.error(f"Error fetching data for {user_stock.upper()}: {str(e)}")
         
-if st.button("🔮 AI-Based Prediction"):
-    st.session_state["ai_mode"] = True
-    st.experimental_rerun()
+
 
 
 # --- FOOTER ---
