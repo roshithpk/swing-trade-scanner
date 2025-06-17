@@ -49,7 +49,7 @@ def run_ai_prediction():
 
                 # --- Scaling ---
                 scaler = MinMaxScaler()
-                scaled_close = scaler.fit_transform(df[['Close']])
+                scaled_close = scaler.fit_transform(df[['Close']]).flatten()
                 st.write("🔄 Scaled close shape:", scaled_close.shape)
 
                 # --- Prepare LSTM data ---
