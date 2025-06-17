@@ -4,3 +4,4 @@ streamlit
 ta
 lxml
 html5lib
+scikit-learn
