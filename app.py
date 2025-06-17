@@ -3,7 +3,6 @@ import pandas as pd
 import yfinance as yf
 from ta.momentum import RSIIndicator
 from ta.trend import EMAIndicator
-from keras.models import Sequential
 import ai_prediction
 
 if "page" not in st.session_state:
