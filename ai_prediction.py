@@ -43,9 +43,11 @@ def add_technical_indicators(df):
     st.write("📥 Fetchuing EMA  data...")
     df['EMA_20'] = EMAIndicator(close=close_prices, window=20).ema_indicator()
     df['EMA_50'] = EMAIndicator(close=close_prices, window=50).ema_indicator()
+    st.write("📥 Fetchuing MACD  data...")
     macd = MACD(close=close_prices)
     df['MACD'] = macd.macd()
     df['MACD_Signal'] = macd.macd_signal()
+    st.write("📥 calculating ADX   data...")
     df['ADX'] = ADXIndicator(high=high_prices, 
                            low=low_prices, 
                            close=close_prices, 
