@@ -11,3 +11,4 @@ prophet
 tensorflow==2.16.1
 keras>=2.13.0
 numpy==1.26.0 
+streamlit-aggrid
