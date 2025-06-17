@@ -1,4 +1,4 @@
-import streamlit as st
+     import streamlit as st
 import yfinance as yf
 import pandas as pd
 import numpy as np
@@ -43,8 +43,9 @@ def run_ai_prediction():
 
                 df = df.dropna()
                 st.write("🧪 Adding Technical Indicators...")
-                df['RSI'] = RSIIndicator(close=df['Close'], window=14).rsi()
-                df['EMA_20'] = EMAIndicator(close=df['Close'], window=20).ema_indicator()
+                df['RSI'] = RSIIndicator(close=df['Close'], window=14).rsi().fillna(method='bfill')
+                df['EMA_20'] = EMAIndicator(close=df['Close'], window=20).ema_indicator().fillna(method='bfill')
+
                 df = df.dropna()
 
                 st.write(f"✅ Data after indicators: {df.shape}")
