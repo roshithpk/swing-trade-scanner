@@ -30,16 +30,17 @@ def add_technical_indicators(df):
     # Momentum Indicators
     st.write("📥 Fetching stock data...")
     df['RSI'] = RSIIndicator(close=close_prices, window=14).rsi()
-    st.write("📥 RSI stock data...")
+    st.write("📥 Fetchuing RSI  data...")
     stoch = StochasticOscillator(high=high_prices, 
                                low=low_prices, 
                                close=close_prices, 
                                window=14)
-    st.write("📥 StochasticOscillator stock data...")
+    st.write("📥 Fetchuing StochasticOscillator data...")
     df['Stoch_%K'] = stoch.stoch()
     df['Stoch_%D'] = stoch.stoch_signal()
     
     # Trend Indicators
+    st.write("📥 Fetchuing EMA  data...")
     df['EMA_20'] = EMAIndicator(close=close_prices, window=20).ema_indicator()
     df['EMA_50'] = EMAIndicator(close=close_prices, window=50).ema_indicator()
     macd = MACD(close=close_prices)
