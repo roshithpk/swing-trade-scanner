@@ -33,10 +33,10 @@ def run_ai_prediction():
             lookback = 20
             future_days = 10
             recent_data = data[["Close"]].iloc[-lookback:].reset_index(drop=True)
-
+            
             X = np.arange(lookback).reshape(-1, 1)
-            y = recent_data["Close"].values
-
+            y = recent_data["Close"].values.ravel()  # ✅ Fix: ensure y is 1D
+            
             model = LinearRegression()
             model.fit(X, y)
 
