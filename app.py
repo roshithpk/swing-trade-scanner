@@ -151,17 +151,18 @@ st.markdown("---")
 st.subheader("🤖 Try AI-Based Prediction")
 
 if "ai_mode" not in st.session_state:
-    st.session_state["ai_mode"] = False
+    st.session_state.ai_mode = False
 
-if not st.session_state["ai_mode"]:
+# Only show button if not in AI mode
+if not st.session_state.ai_mode:
     if st.button("🔮 AI-Based Prediction"):
-        st.session_state["ai_mode"] = True
-        st.experimental_rerun()
+        st.session_state.ai_mode = True
+        st.experimental_rerun()  # Safe here because ai_mode will be True on next run
 else:
-    # AI Mode active
+    # When in AI mode, run ai_predictor and stop further execution
     import ai_predictor
     ai_predictor.run()
-    st.session_state["ai_mode"] = False
+    st.session_state.ai_mode = False  # Reset the mode after running
     st.stop()
 
 
