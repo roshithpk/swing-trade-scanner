@@ -141,6 +141,7 @@ if user_stock:
             st.error("❌ Not enough data for analysis.")
     except Exception as e:
         st.error(f"Error fetching data for {user_stock.upper()}: {str(e)}")
+        
 if st.button("🔮 AI-Based Prediction"):
     st.session_state["ai_mode"] = True
     st.experimental_rerun()
