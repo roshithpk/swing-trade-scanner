@@ -45,7 +45,7 @@ def run_ai_prediction():
                 st.write("🧪 Adding Technical Indicators...")
                 df['RSI'] = RSIIndicator(close=df['Close'], window=14).rsi().fillna(method='bfill')
                 df['EMA_20'] = EMAIndicator(close=df['Close'], window=20).ema_indicator().fillna(method='bfill')
-
+                st.write("🧪 Adding and checking...")
                 df = df.dropna()
 
                 st.write(f"✅ Data after indicators: {df.shape}")
