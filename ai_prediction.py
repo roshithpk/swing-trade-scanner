@@ -1,87 +1,78 @@
 import streamlit as st
-import pandas as pd
 import yfinance as yf
+import pandas as pd
 from prophet import Prophet
 import plotly.graph_objects as go
 
 def run_ai_prediction():
-    st.header("🧠 AI-Based Stock Price Forecast")
-    st.caption("This model uses historical daily data and Facebook Prophet to forecast the next 14 days.")
+    st.subheader("🧠 AI-Based Forecast")
+    st.markdown("Use AI to predict stock trend and visualize future candles for the next 1–2 weeks.")
 
-    with st.expander("🔮 AI Prediction Section", expanded=True):
-        stock_input = st.text_input("Enter NSE Stock Symbol (e.g., INFY)", key="ai_input")
-        if st.button("Predict", key="ai_button"):
-            if stock_input:
-                ticker = stock_input.strip().upper() + ".NS"
-                try:
-                    df = yf.download(ticker, period="6mo", interval="1d", progress=False)
-                    if df.empty:
-                        st.error("⚠️ No data found.")
-                        return
+    with st.expander("📈 Click here to use AI Prediction"):
+        stock_input = st.text_input("Enter Stock Symbol (e.g., INFY)")
 
-                    df.reset_index(inplace=True)
-                    df = df[["Date", "Open", "High", "Low", "Close"]].dropna()
-                    df["Close"] = pd.to_numeric(df["Close"], errors='coerce')
-                    df = df.dropna(subset=["Close"])
-                    df["Date"] = pd.to_datetime(df["Date"])
+        if stock_input:
+            full_ticker = stock_input.strip().upper() + ".NS"
+            try:
+                # Download historical data
+                df = yf.download(full_ticker, period="6mo", interval="1d", progress=False)
+                if df.empty or len(df) < 60:
+                    st.warning("Not enough data to make prediction. Need at least 60 days.")
+                    return
 
-                    # Prepare data for Prophet
-                    prophet_df = df[["Date", "Close"]].rename(columns={"Date": "ds", "Close": "y"})
-                    prophet_df["y"] = prophet_df["y"].astype(float)
+                df.reset_index(inplace=True)
 
-                    model = Prophet()
-                    model.fit(prophet_df)
+                # Prepare data for Prophet
+                prophet_df = df[["Date", "Close"]].rename(columns={"Date": "ds", "Close": "y"})
+                prophet_model = Prophet(daily_seasonality=True)
+                prophet_model.fit(prophet_df)
 
-                    future = model.make_future_dataframe(periods=14)
-                    forecast = model.predict(future)
+                # Future 14 days
+                future = prophet_model.make_future_dataframe(periods=14)
+                forecast = prophet_model.predict(future)
 
-                    # Merge actuals with forecast
-                    forecast_df = forecast[["ds", "yhat"]].rename(columns={"ds": "Date", "yhat": "Predicted"})
-                    merged = pd.merge(df, forecast_df, on="Date", how="outer")
+                # Merge predictions back into original
+                forecast_df = forecast[["ds", "yhat"]].rename(columns={"ds": "Date", "yhat": "Predicted"})
+                merged = pd.merge(df, forecast_df, on="Date", how="outer")
 
-                    # Plot candlestick with predicted line
-                    fig = go.Figure()
+                # Display table of predictions (last known + forecast)
+                pred_range = forecast_df[forecast_df["Date"] > df["Date"].max()].copy()
+                pred_range["Predicted"] = pred_range["Predicted"].round(2)
+                st.markdown("#### 📋 Forecasted Prices:")
+                st.dataframe(pred_range.tail(10), hide_index=True, use_container_width=True)
 
-                    # Actual candlestick
-                    fig.add_trace(go.Candlestick(
-                        x=df["Date"],
-                        open=df["Open"],
-                        high=df["High"],
-                        low=df["Low"],
-                        close=df["Close"],
-                        name="Actual",
-                        increasing_line_color='green',
-                        decreasing_line_color='red'
-                    ))
+                # Plot candlestick + forecast
+                fig = go.Figure()
 
-                    # Prediction line
-                    pred_range = merged[merged["Predicted"].notnull() & merged["Date"] > df["Date"].max()]
-                    fig.add_trace(go.Scatter(
-                        x=pred_range["Date"],
-                        y=pred_range["Predicted"],
-                        mode='lines+markers',
-                        name="Predicted",
-                        line=dict(color='blue', dash="dot")
-                    ))
+                # Candlestick for historical data
+                fig.add_trace(go.Candlestick(
+                    x=df["Date"],
+                    open=df["Open"],
+                    high=df["High"],
+                    low=df["Low"],
+                    close=df["Close"],
+                    name="Historical"
+                ))
 
-                    fig.update_layout(
-                        title=f"📈 {stock_input.upper()} - AI Forecast (Next 14 Days)",
-                        xaxis_title="Date",
-                        yaxis_title="Price (₹)",
-                        xaxis_rangeslider_visible=False,
-                        template="plotly_dark",
-                        height=600
-                    )
+                # Prediction line
+                pred_range = merged[merged["Predicted"].notnull() & merged["Date"] > df["Date"].max()]
+                fig.add_trace(go.Scatter(
+                    x=pred_range["Date"].tolist(),
+                    y=pred_range["Predicted"].tolist(),
+                    mode='lines+markers',
+                    name="Predicted",
+                    line=dict(color='blue', dash="dot")
+                ))
 
-                    st.plotly_chart(fig, use_container_width=True)
+                fig.update_layout(
+                    title=f"{stock_input.upper()} - AI Forecast (Next 2 Weeks)",
+                    xaxis_title="Date",
+                    yaxis_title="Price",
+                    height=600,
+                    xaxis_rangeslider_visible=False
+                )
 
-                    # Show table of predicted prices
-                    pred_table = pred_range[["Date", "Predicted"]].copy()
-                    pred_table["Predicted"] = pred_table["Predicted"].apply(lambda x: f"₹{x:.2f}")
-                    st.markdown("### 📅 Forecast Table")
-                    st.dataframe(pred_table, hide_index=True)
+                st.plotly_chart(fig, use_container_width=True)
 
-                except Exception as e:
-                    st.error(f"Error during AI prediction: {str(e)}")
-            else:
-                st.warning("⚠️ Please enter a valid stock symbol.")
+            except Exception as e:
+                st.error(f"Error during AI prediction: {str(e)}")
