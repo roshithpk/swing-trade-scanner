@@ -43,7 +43,7 @@ def run_ai_prediction():
             st.write(f"📜 y type: {type(y)}")
 
             model = LinearRegression()
-            model.fit(X, y)
+            model.fit(X, y.flatten())
 
             # Predict for next 14 days
             future_days = 14
