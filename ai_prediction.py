@@ -86,7 +86,7 @@ def generate_signals(df, forecast):
         signals = []
         reasons = []
         last_row = df.iloc[-1]
-        pred = forecast.iloc[0]['Predicted Close']
+        pred = float(forecast['Predicted Close'].iloc[0])
         
         # 1. Price vs Prediction
         price_diff = (pred - last_row['Close']) / last_row['Close']
