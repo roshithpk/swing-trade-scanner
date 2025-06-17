@@ -300,14 +300,30 @@ def run_ai_prediction():
                 table_height = min(len(forecast_df), 8) * 38 + 50
                 
                 # --- Render AgGrid ---
-                st.subheader("Forecast Details:")
-                AgGrid(
-                    forecast_df,
-                    gridOptions=grid_options,
-                    height=table_height,
-                    theme="balham",
-                    fit_columns_on_grid_load=False
-                )
+                with st.container():
+                    st.markdown(
+                        """
+                        <style>
+                        .ag-theme-balham {
+                            max-width: 300px;  /* Adjust width as needed */
+                            margin-left: auto;
+                            margin-right: auto;
+                        }
+                        </style>
+                        """,
+                        unsafe_allow_html=True
+                    )
+                
+                    st.subheader("Forecast Details:")
+                
+                    AgGrid(
+                        forecast_df,
+                        gridOptions=grid_options,
+                        height=table_height,
+                        theme="balham",
+                        fit_columns_on_grid_load=False
+                    )
+
                                 
             except Exception as e:
                 st.error(f"Prediction failed: {str(e)}")
