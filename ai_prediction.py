@@ -1,71 +1,79 @@
 import streamlit as st
 import yfinance as yf
-import numpy as np
 import pandas as pd
-from sklearn.linear_model import LinearRegression
-import matplotlib.pyplot as plt
+from prophet import Prophet
+import plotly.graph_objects as go
+from datetime import datetime, timedelta
 
 def run_ai_prediction():
-    st.subheader("🤖 AI-Based Stock Price Forecast")
-    with st.expander("ℹ️ About AI Forecast"):
-        st.markdown("This uses **Linear Regression** on historical closing prices to predict the stock trend for the next 1–2 weeks.")
+    st.subheader("🤖 AI-Based Forecast")
+    st.markdown("Use AI (Prophet) to forecast next 1–2 weeks of price movement with candlestick visualization.")
 
-    st.write("✅ ai_prediction.py successfully loaded")  # Debug indicator
+    with st.expander("📈 AI-Based Price Forecast"):
+        stock_input = st.text_input("Enter NSE stock symbol (e.g., INFY)", key="ai_stock")
 
-    stock_input = st.text_input("Enter stock symbol for AI prediction (e.g., INFY)", key="ai_stock_input")
+        if stock_input:
+            ticker = stock_input.upper().strip() + ".NS"
+            try:
+                df = yf.download(ticker, period="6mo", interval="1d", progress=False)
 
-    if st.button("Predict Price", key="ai_predict_button"):
-        if not stock_input:
-            st.warning("Please enter a stock symbol.")
-            return
+                if df.empty:
+                    st.error("⚠️ No data found.")
+                    return
 
-        try:
-            ticker = stock_input.strip().upper() + ".NS"
-            data = yf.download(ticker, period="6mo", progress=False)
+                df.reset_index(inplace=True)
+                df = df[["Date", "Open", "High", "Low", "Close"]]
 
-            if data.empty or len(data) < 30:
-                st.warning("Not enough historical data to make a prediction.")
-                return
+                # Prepare for Prophet
+                prophet_df = df[["Date", "Close"]].rename(columns={"Date": "ds", "Close": "y"})
 
-            data = data.dropna()
-            data["Date"] = data.index
-            data.reset_index(drop=True, inplace=True)
-            data["DayIndex"] = np.arange(len(data))
+                model = Prophet()
+                model.fit(prophet_df)
 
-            # Use closing prices for prediction
-            X = data["DayIndex"].values.reshape(-1, 1)
-            y = data["Close"].values
+                future = model.make_future_dataframe(periods=10)
+                forecast = model.predict(future)
 
-            model = LinearRegression()
-            model.fit(X, y.flatten())
+                # --- Create Candlestick Chart ---
+                fig = go.Figure()
 
-            # Predict for next 14 days
-            future_days = 14
-            future_index = np.arange(len(data), len(data) + future_days).reshape(-1, 1)
-            future_preds = model.predict(future_index)
+                # Historical candles
+                fig.add_trace(go.Candlestick(
+                    x=df["Date"],
+                    open=df["Open"],
+                    high=df["High"],
+                    low=df["Low"],
+                    close=df["Close"],
+                    name="Historical"
+                ))
 
-            future_dates = pd.date_range(start=data["Date"].iloc[-1] + pd.Timedelta(days=1), periods=future_days, freq='B')  # Business days
+                # Forecast line
+                fig.add_trace(go.Scatter(
+                    x=forecast["ds"],
+                    y=forecast["yhat"],
+                    mode="lines",
+                    line=dict(color="blue", dash="dash"),
+                    name="Predicted Close"
+                ))
 
-            # Merge with existing data
-            forecast_df = pd.DataFrame({
-                "Date": future_dates,
-                "Predicted Close": future_preds
-            })
+                fig.update_layout(
+                    title=f"{stock_input.upper()} - Price Forecast (Next 10 Days)",
+                    xaxis_title="Date",
+                    yaxis_title="Price (₹)",
+                    xaxis_rangeslider_visible=False,
+                    template="plotly_dark",
+                    height=600
+                )
 
-            st.markdown("### 🔍 AI Forecast Table")
-            forecast_display = forecast_df.copy()
-            forecast_display["Predicted Close"] = forecast_display["Predicted Close"].round(2)
-            st.dataframe(forecast_display)
+                # Display
+                st.plotly_chart(fig, use_container_width=True)
 
-            st.markdown("### 📈 Price Chart with AI Forecast")
-            fig, ax = plt.subplots(figsize=(10, 5))
-            ax.plot(data["Date"], data["Close"], label="Actual Close", color='blue')
-            ax.plot(forecast_df["Date"], forecast_df["Predicted Close"], label="Forecasted Close", linestyle="--", color='red')
-            ax.set_xlabel("Date")
-            ax.set_ylabel("Price")
-            ax.set_title(f"{ticker} - Actual vs Predicted Close Price")
-            ax.legend()
-            st.pyplot(fig)
+                # Table for forecast
+                forecast_table = forecast[["ds", "yhat"]].tail(10)
+                forecast_table.columns = ["Date", "Predicted Close (₹)"]
+                forecast_table["Predicted Close (₹)"] = forecast_table["Predicted Close (₹)"].apply(lambda x: f"₹{x:.2f}")
 
-        except Exception as e:
-            st.error(f"❌ Error during AI prediction: {str(e)}")
+                st.markdown("### 📋 Forecast Table")
+                st.dataframe(forecast_table, hide_index=True)
+
+            except Exception as e:
+                st.error(f"Error during AI prediction: {str(e)}")
