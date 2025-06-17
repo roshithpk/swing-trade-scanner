@@ -285,20 +285,21 @@ def run_ai_prediction():
                 
                 # Forecast Table
                 # --- Clean forecast_df ---
+                # Clean and format table data for display
+                forecast_df["Date"] = pd.to_datetime(forecast_df["Date"]).dt.strftime("%d-%m-%Y")  # Remove 00:00
                 forecast_df["Predicted Close"] = forecast_df["Predicted Close"].round(2)
-                forecast_df["Date"] = forecast_df["Date"].dt.strftime("%d-%m-%Y")  # remove 00:00
                 
                 # --- Configure AgGrid for compact width ---
                 gb = GridOptionsBuilder.from_dataframe(forecast_df)
                 gb.configure_default_column(resizable=True, wrapText=False, autoHeight=True)
-                gb.configure_column("Date", width=120, cellStyle={'textAlign': 'center'})
-                gb.configure_column("Predicted Close", width=140, cellStyle={'textAlign': 'center'})
+                gb.configure_column("Date", width=100, cellStyle={"textAlign": "center"})
+                gb.configure_column("Predicted Close", width=120, type=["numericColumn"], cellStyle={"textAlign": "center"})
                 grid_options = gb.build()
                 
-                # --- Set reasonable height ---
+                # --- Set table height based on rows ---
                 table_height = min(len(forecast_df), 8) * 38 + 50
                 
-                # --- Display table ---
+                # --- Render AgGrid ---
                 st.subheader("Forecast Details:")
                 AgGrid(
                     forecast_df,
