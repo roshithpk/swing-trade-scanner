@@ -96,14 +96,11 @@ def generate_signals(df, forecast):
         price_diff = (pred_close - current_close) / current_close
         
         if price_diff > 0.02:
-            signals.extend(["BUY", "BUY"])
+            signals.append("BUY")
             reasons.append(f"Predicted price {price_diff:.2%} higher")
-        elif price_diff < -0.02:
-            signals.extend(["SELL", "SELL"])
-            reasons.append(f"Predicted price {abs(price_diff):.2%} lower")
         else:
             signals.append("HOLD")
-            reasons.append("Prediction within 2% range")
+            reasons.append("Predicted price not significantly higher")
         
         # 2. RSI
         if 'RSI' in df.columns:
