@@ -11,6 +11,7 @@ from ta.momentum import RSIIndicator, StochasticOscillator
 from ta.trend import EMAIndicator, MACD, ADXIndicator
 from ta.volatility import BollingerBands
 from ta.volume import VolumeWeightedAveragePrice
+from st_aggrid import AgGrid, GridOptionsBuilder
 
 # --- LSTM HELPER FUNCTION ---
 def prepare_lstm_data(data, n_steps=30):
@@ -284,7 +285,23 @@ def run_ai_prediction():
                 
                 # Forecast Table
                 st.subheader("Forecast Details:")
-                st.dataframe(forecast_df.set_index('Date'))
+                # Use AgGrid for better layout control
+                gb = GridOptionsBuilder.from_dataframe(forecast_df)
+                gb.configure_default_column(resizable=True, wrapText=True, autoHeight=True)
+                gb.configure_column("Date", width=140)
+                gb.configure_column("Predicted Close", width=180)
+                grid_options = gb.build()
+                
+                # Adjust table height dynamically based on number of rows
+                table_height = len(forecast_df) * 40 + 50
+                
+                AgGrid(
+                    forecast_df,
+                    gridOptions=grid_options,
+                    height=table_height,
+                    fit_columns_on_grid_load=True,
+                    theme="balham"
+                )
                 
             except Exception as e:
                 st.error(f"Prediction failed: {str(e)}")
