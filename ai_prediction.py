@@ -1,94 +1,113 @@
 import streamlit as st
 import yfinance as yf
 import pandas as pd
-from prophet import Prophet
+import numpy as np
+from sklearn.linear_model import LinearRegression
 import plotly.graph_objects as go
+from datetime import timedelta
 
 def run_ai_prediction():
-    st.subheader("🧠 AI-Based Forecast")
-    st.markdown("Use AI to predict stock trend and visualize future candles for the next 1–2 weeks.")
+    st.header("🧠 AI-Based Price Prediction")
+    st.subheader("📌 Enter Stock Symbol (NSE) for Prediction")
 
-    with st.expander("📈 Click here to use AI Prediction"):
-        stock_input = st.text_input("Enter Stock Symbol (e.g., INFY)")
+    stock_symbol = st.text_input("Enter Stock Symbol (e.g., INFY):")
+    forecast_days = st.slider("Days to Forecast", 1, 14, 7)
 
-        if stock_input:
-            full_ticker = stock_input.strip().upper() + ".NS"
-            try:
-                # Download historical data
-                df = yf.download(full_ticker, period="6mo", interval="1d", progress=False)
-                if df.empty or len(df) < 60:
-                    st.warning("Not enough data to make prediction. Need at least 60 days.")
-                    return
+    if stock_symbol:
+        full_ticker = stock_symbol.upper().strip() + ".NS"
+        try:
+            data = yf.download(full_ticker, period="6mo", progress=False)
+            if data.empty or len(data) < 30:
+                st.warning("⚠️ Not enough data for prediction.")
+                return
 
-                df.reset_index(inplace=True)
+            # Keep only necessary columns
+            df = data[["Close", "Open", "High", "Low"]].dropna().reset_index()
 
-                # Prepare data for Prophet
-                prophet_df = df[["Date", "Close"]].rename(columns={"Date": "ds", "Close": "y"})
-                prophet_model = Prophet(daily_seasonality=True)
-                prophet_model.fit(prophet_df)
+            df["Date"] = pd.to_datetime(df["Date"])
+            df = df[["Date", "Open", "High", "Low", "Close"]]
 
-                # Future 14 days
-                future = prophet_model.make_future_dataframe(periods=14)
-                forecast = prophet_model.predict(future)
+            df["Days"] = (df["Date"] - df["Date"].min()).dt.days
 
-                # Merge predictions back into original
-                forecast_df = forecast[["ds", "yhat"]].rename(columns={"ds": "Date", "yhat": "Predicted"})
-                merged = pd.merge(df, forecast_df, on="Date", how="outer")
+            # MODEL
+            X = df[["Days"]]
+            y = df[["Close"]]
 
-                # Display table of predictions (last known + forecast)
-                pred_range = forecast_df[forecast_df["Date"] > df["Date"].max()].copy()
-                pred_range["Predicted"] = pred_range["Predicted"].round(2)
-                st.markdown("#### 📋 Forecasted Prices:")
-                st.dataframe(pred_range.tail(10), hide_index=True, use_container_width=True)
+            st.write(f"📊 X shape: {X.shape}")
+            st.write(f"📉 y shape: {y.shape}")
 
-                st.write("📊 Shape of df (historical):", df.shape)
-                st.write("📊 Shape of forecast_df:", forecast_df.shape)
-                st.write("📊 Shape of merged:", merged.shape)
-                
-                st.write("📊 Sample forecast_df:", forecast_df.tail(3))
-                st.write("📊 Sample merged:", merged.tail(3))
-                
-                # Also print pred_range that’s being plotted
-                pred_range = merged[merged["Predicted"].notnull() & (merged["Date"] > df["Date"].max())]
-                
-                st.write("📊 pred_range shape:", pred_range.shape)
-                st.write("📊 pred_range.dtypes:", pred_range.dtypes)
-                st.write("📊 pred_range sample:", pred_range.tail(3))
+            model = LinearRegression()
+            model.fit(X, y)
 
+            # Predict future
+            last_day = df["Days"].iloc[-1]
+            future_days = np.array([last_day + i for i in range(1, forecast_days + 1)]).reshape(-1, 1)
+            future_dates = [df["Date"].max() + timedelta(days=i) for i in range(1, forecast_days + 1)]
+            predictions = model.predict(future_days).flatten()
 
-                
-                # Plot candlestick + forecast
-                fig = go.Figure()
+            forecast_df = pd.DataFrame({
+                "Date": future_dates,
+                "Predicted": predictions
+            })
 
-                # Candlestick for historical data
-                fig.add_trace(go.Candlestick(
-                    x=df["Date"],
-                    open=df["Open"],
-                    high=df["High"],
-                    low=df["Low"],
-                    close=df["Close"],
-                    name="Historical"
-                ))
+            merged = pd.merge(df, forecast_df, on="Date", how="outer")
 
-                # Prediction line
-                pred_range = merged[merged["Predicted"].notnull() & merged["Date"] > df["Date"].max()]
-                fig.add_trace(go.Scatter(
-                    x=pred_range["Date"].tolist(),
-                    y=pred_range["Predicted"].tolist(),
-                    mode='lines+markers',
-                    name="Predicted",
-                    line=dict(color='blue', dash="dot")
-                ))
+            # Debug output
+            st.write("📊 Shape of df (historical):", df.shape)
+            st.write("📊 Shape of forecast_df:", forecast_df.shape)
+            st.write("📊 Sample forecast_df:", forecast_df.tail(3))
+            st.write("📊 Sample merged:", merged.tail(3))
 
-                fig.update_layout(
-                    title=f"{stock_input.upper()} - AI Forecast (Next 2 Weeks)",
-                    xaxis_title="Date",
-                    yaxis_title="Price",
-                    height=600,
-                    xaxis_rangeslider_visible=False
-                )
+            pred_range = merged[merged["Predicted"].notnull() & (merged["Date"] > df["Date"].max())]
 
-                st.plotly_chart(fig, use_container_width=True)
+            st.write("📊 pred_range shape:", pred_range.shape)
+            st.write("📊 pred_range.dtypes:", pred_range.dtypes)
+            st.write("📊 pred_range sample:", pred_range.tail(3))
 
-            except Exception as e:
-                st.error(f"Error during AI prediction: {str(e)}")
+            # PLOT
+            fig = go.Figure()
+
+            # Add candlestick chart for historical
+            fig.add_trace(go.Candlestick(
+                x=df["Date"],
+                open=df["Open"],
+                high=df["High"],
+                low=df["Low"],
+                close=df["Close"],
+                name="Historical"
+            ))
+
+            # Add prediction line
+            x_vals = pred_range["Date"]
+            y_vals = pred_range["Predicted"]
+
+            st.write("✅ X values type:", type(x_vals), "Shape:", x_vals.shape)
+            st.write("✅ Y values type:", type(y_vals), "Shape:", y_vals.shape)
+
+            fig.add_trace(go.Scatter(
+                x=x_vals,
+                y=y_vals,
+                mode='lines+markers',
+                name="Predicted",
+                line=dict(color='blue', dash="dot")
+            ))
+
+            fig.update_layout(title="📈 AI Price Prediction (Linear Regression)",
+                              xaxis_title="Date",
+                              yaxis_title="Price",
+                              xaxis_rangeslider_visible=False)
+
+            st.plotly_chart(fig, use_container_width=True)
+
+            # Result Table
+            st.subheader("📋 Predicted Trend")
+            entry_price = df["Close"].iloc[-1]
+            exit_price = predictions[-1]
+            st.table(pd.DataFrame([{
+                "Entry Price (Today)": round(entry_price, 2),
+                f"Exit Price (After {forecast_days} Days)": round(exit_price, 2),
+                "Trend": "📈 Up" if exit_price > entry_price else "📉 Down"
+            }]))
+
+        except Exception as e:
+            st.error(f"Error during AI prediction: {e}")
