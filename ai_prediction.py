@@ -36,12 +36,6 @@ def run_ai_prediction():
             X = data["DayIndex"].values.reshape(-1, 1)
             y = data["Close"].values
 
-            st.write(f"📊 X shape: {X.shape}")
-            st.write(f"📉 y shape: {y.shape}")
-            st.write("✅ X preview:", X[:5])
-            st.write("✅ y preview:", y[:5])
-            st.write(f"📜 y type: {type(y)}")
-
             model = LinearRegression()
             model.fit(X, y.flatten())
 
