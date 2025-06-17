@@ -1,4 +1,4 @@
-import streamlit as st
+ import streamlit as st
 import yfinance as yf
 import pandas as pd
 import numpy as np
@@ -20,15 +20,13 @@ def run_ai_prediction():
             if data.empty or len(data) < 30:
                 st.warning("⚠️ Not enough data for prediction.")
                 return
-
-            # Keep only necessary columns
+            
+            # ✅ Reset index to make 'Date' a proper column
             df = data.copy()
-            df.reset_index(inplace=True)  # Converts index to column
+            df.reset_index(inplace=True)
             df = df[["Date", "Open", "High", "Low", "Close"]].dropna()
-
+            
             df["Date"] = pd.to_datetime(df["Date"])
-            df = df[["Date", "Open", "High", "Low", "Close"]]
-
             df["Days"] = (df["Date"] - df["Date"].min()).dt.days
 
             # MODEL
