@@ -30,17 +30,19 @@ def run_ai_prediction():
             data["RSI"] = RSIIndicator(data["Close"], window=14).rsi()
 
             # Prepare training data
-            lookback = 20
-            future_days = 10
-            recent_data = data[["Close"]].iloc[-lookback:].reset_index(drop=True)
-            
+            lookback = 120
+            recent_data = data.tail(lookback)
             X = np.arange(lookback).reshape(-1, 1)
-            y = recent_data["Close"].to_numpy().flatten()  # Ensure 1D array
+            y = recent_data["Close"].to_numpy().flatten()  # Ensure 1D
             
-            # Optional debug
-            st.write("Shape of X:", X.shape)
-            st.write("Shape of y:", y.shape)
+            # Debugging
+            st.write("📊 X shape:", X.shape)
+            st.write("📉 y shape:", y.shape)
+            st.write("✅ X preview:", X[:5])
+            st.write("✅ y preview:", y[:5])
+            st.write("📜 y type:", type(y))
             
+            # Model
             model = LinearRegression()
             model.fit(X, y)
 
