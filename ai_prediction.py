@@ -318,7 +318,15 @@ def run_ai_prediction():
                     theme="balham",
                     fit_columns_on_grid_load=False
                 )
-                
+
+                st.markdown("""
+                <style>
+                .ag-theme-balham .ag-cell {
+                    padding: 4px !important;
+                    font-size: 13px;
+                }
+                </style>
+                """, unsafe_allow_html=True)
                 # Close the div
                 st.markdown("</div>", unsafe_allow_html=True)
 
