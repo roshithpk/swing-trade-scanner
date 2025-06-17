@@ -289,7 +289,7 @@ def run_ai_prediction():
                 gb = GridOptionsBuilder.from_dataframe(forecast_df)
                 gb.configure_default_column(resizable=True, wrapText=True, autoHeight=True)
                 gb.configure_column("Date", width=140)
-                gb.configure_column("Predicted Close", width=180)
+                gb.configure_column("Predicted Close", width=120, cellStyle={'textAlign': 'center'})
                 grid_options = gb.build()
                 
                 # Adjust table height dynamically based on number of rows
