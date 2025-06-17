@@ -150,14 +150,18 @@ if user_stock:
 st.markdown("---")
 st.subheader("🤖 Try AI-Based Prediction")
 
-if st.button("🔮 AI-Based Prediction"):
-    st.session_state["ai_mode"] = True
-    st.experimental_rerun()
-
-if "ai_mode" in st.session_state and st.session_state["ai_mode"]:
+if "ai_mode" not in st.session_state:
     st.session_state["ai_mode"] = False
+
+if not st.session_state["ai_mode"]:
+    if st.button("🔮 AI-Based Prediction"):
+        st.session_state["ai_mode"] = True
+        st.experimental_rerun()
+else:
+    # AI Mode active
     import ai_predictor
     ai_predictor.run()
+    st.session_state["ai_mode"] = False
     st.stop()
 
 
