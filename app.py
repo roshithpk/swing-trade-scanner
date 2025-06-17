@@ -141,7 +141,7 @@ if user_stock:
                 "Volume (x)": f"{latest_volume / avg_volume:.1f}",
                 "RSI": f"{latest_rsi:.1f}",
                 "Trend": trend,
-                "Why Buy?": "✅ Good for Swing Trade" if not remarks else "❌ " + ", ".join(remarks)
+                "Remarks?": "✅ Good for Swing Trade" if not remarks else "❌ " + ", ".join(remarks)
             }
             st.dataframe(pd.DataFrame([result]), hide_index=True)
         else:
