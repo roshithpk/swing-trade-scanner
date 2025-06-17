@@ -30,10 +30,12 @@ def add_technical_indicators(df):
     # Momentum Indicators
     st.write("📥 Fetching stock data...")
     df['RSI'] = RSIIndicator(close=close_prices, window=14).rsi()
+    st.write("📥 RSI stock data...")
     stoch = StochasticOscillator(high=high_prices, 
                                low=low_prices, 
                                close=close_prices, 
                                window=14)
+    st.write("📥 StochasticOscillator stock data...")
     df['Stoch_%K'] = stoch.stoch()
     df['Stoch_%D'] = stoch.stoch_signal()
     
