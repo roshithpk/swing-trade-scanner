@@ -1,80 +1,77 @@
-# ai_prediction.py
-
 import streamlit as st
 import yfinance as yf
 import numpy as np
 import pandas as pd
 from sklearn.linear_model import LinearRegression
-from ta.momentum import RSIIndicator
-from ta.trend import EMAIndicator
-import plotly.graph_objects as go
-
+import matplotlib.pyplot as plt
 
 def run_ai_prediction():
-    st.header("🤖 AI-Based Price Prediction")
-    st.subheader("Estimate short-term trend and future prices using basic AI")
+    st.subheader("🤖 AI-Based Stock Price Forecast")
+    with st.expander("ℹ️ About AI Forecast"):
+        st.markdown("This uses **Linear Regression** on historical closing prices to predict the stock trend for the next 1–2 weeks.")
 
-    ai_stock = st.text_input("Enter NSE Stock Symbol (e.g., INFY)", key="ai_stock_input")
+    st.write("✅ ai_prediction.py successfully loaded")  # Debug indicator
 
-    if ai_stock and st.button("Run AI Prediction"):
+    stock_input = st.text_input("Enter stock symbol for AI prediction (e.g., INFY)", key="ai_stock_input")
+
+    if st.button("Predict Price", key="ai_predict_button"):
+        if not stock_input:
+            st.warning("Please enter a stock symbol.")
+            return
+
         try:
-            ticker = ai_stock.strip().upper() + ".NS"
+            ticker = stock_input.strip().upper() + ".NS"
             data = yf.download(ticker, period="6mo", progress=False)
 
-            if len(data) < 30:
-                st.error("❌ Not enough data to predict. Try another stock.")
+            if data.empty or len(data) < 30:
+                st.warning("Not enough historical data to make a prediction.")
                 return
 
-            data.dropna(inplace=True)
-            data["EMA20"] = EMAIndicator(data["Close"], window=20).ema_indicator()
-            data["RSI"] = RSIIndicator(data["Close"], window=14).rsi()
+            data = data.dropna()
+            data["Date"] = data.index
+            data.reset_index(drop=True, inplace=True)
+            data["DayIndex"] = np.arange(len(data))
 
-            # Prepare training data
-            lookback = 120
-            recent_data = data.tail(lookback)
-            X = np.arange(lookback).reshape(-1, 1)
-            y = recent_data["Close"].to_numpy().flatten()  # Ensure 1D
-            
-            # Debugging
-            st.write("🚀 AI Prediction block triggered")
-            st.write("📊 X shape:", X.shape)
-            st.write("📉 y shape:", y.shape)
+            # Use closing prices for prediction
+            X = data["DayIndex"].values.reshape(-1, 1)
+            y = data["Close"].values
+
+            st.write(f"📊 X shape: {X.shape}")
+            st.write(f"📉 y shape: {y.shape}")
             st.write("✅ X preview:", X[:5])
             st.write("✅ y preview:", y[:5])
-            st.write("📜 y type:", type(y))
-            
-            # Model
+            st.write(f"📜 y type: {type(y)}")
+
             model = LinearRegression()
             model.fit(X, y)
 
-            # Predict next 10 days
-            X_future = np.arange(lookback, lookback + future_days).reshape(-1, 1)
-            y_future = model.predict(X_future)
+            # Predict for next 14 days
+            future_days = 14
+            future_index = np.arange(len(data), len(data) + future_days).reshape(-1, 1)
+            future_preds = model.predict(future_index)
 
-            # Summary Table
-            entry_price = y[-1]
-            exit_price = y_future[-1]
-            trend = "📈 Uptrend" if exit_price > entry_price else "📉 Downtrend"
+            future_dates = pd.date_range(start=data["Date"].iloc[-1] + pd.Timedelta(days=1), periods=future_days, freq='B')  # Business days
 
-            st.markdown("### 📋 AI Forecast Summary")
-            st.table({
-                "Entry Price (Today)": [f"₹{entry_price:.2f}"],
-                "Predicted Exit (10d)": [f"₹{exit_price:.2f}"],
-                "Trend": [trend]
+            # Merge with existing data
+            forecast_df = pd.DataFrame({
+                "Date": future_dates,
+                "Predicted Close": future_preds
             })
 
-            # Plot
-            all_dates = list(data.index[-lookback:]) + [data.index[-1] + pd.Timedelta(days=i) for i in range(1, future_days + 1)]
-            fig = go.Figure()
+            st.markdown("### 🔍 AI Forecast Table")
+            forecast_display = forecast_df.copy()
+            forecast_display["Predicted Close"] = forecast_display["Predicted Close"].round(2)
+            st.dataframe(forecast_display)
 
-            fig.add_trace(go.Scatter(x=data.index[-lookback:], y=y, mode="lines+markers", name="Historical"))
-            fig.add_trace(go.Scatter(x=all_dates[-future_days:], y=y_future, mode="lines+markers", name="Predicted", line=dict(dash="dot")))
-
-            fig.update_layout(title=f"{ai_stock.upper()} – Price Prediction (10 Days)",
-                              xaxis_title="Date", yaxis_title="Price (₹)",
-                              template="plotly_dark", height=500)
-            st.plotly_chart(fig, use_container_width=True)
+            st.markdown("### 📈 Price Chart with AI Forecast")
+            fig, ax = plt.subplots(figsize=(10, 5))
+            ax.plot(data["Date"], data["Close"], label="Actual Close", color='blue')
+            ax.plot(forecast_df["Date"], forecast_df["Predicted Close"], label="Forecasted Close", linestyle="--", color='red')
+            ax.set_xlabel("Date")
+            ax.set_ylabel("Price")
+            ax.set_title(f"{ticker} - Actual vs Predicted Close Price")
+            ax.legend()
+            st.pyplot(fig)
 
         except Exception as e:
-            st.error(f"Error during AI prediction: {e}")
-
+            st.error(f"❌ Error during AI prediction: {str(e)}")
