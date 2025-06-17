@@ -35,7 +35,11 @@ def run_ai_prediction():
             recent_data = data[["Close"]].iloc[-lookback:].reset_index(drop=True)
             
             X = np.arange(lookback).reshape(-1, 1)
-            y = recent_data["Close"].values.ravel()  # ✅ Fix: ensure y is 1D
+            y = recent_data["Close"].to_numpy().flatten()  # Ensure 1D array
+            
+            # Optional debug
+            # st.write("Shape of X:", X.shape)
+            # st.write("Shape of y:", y.shape)
             
             model = LinearRegression()
             model.fit(X, y)
