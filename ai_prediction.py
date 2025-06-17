@@ -54,11 +54,13 @@ def add_technical_indicators(df):
                            window=14).adx()
     
     # Volatility Indicators
+    st.write("📥 Fetchhing BB data...")
     bb = BollingerBands(close=close_prices, window=20, window_dev=2)
     df['BB_Upper'] = bb.bollinger_hband()
     df['BB_Lower'] = bb.bollinger_lband()
     
     # Volume Indicators
+    st.write("📥 Calculating VWAP data...")
     df['VWAP'] = VolumeWeightedAveragePrice(high=high_prices,
                                           low=low_prices,
                                           close=close_prices,
