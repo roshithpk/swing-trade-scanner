@@ -3,7 +3,7 @@ import yfinance as yf
 import pandas as pd
 import numpy as np
 from datetime import timedelta
-import matplotlib.pyplot as plt
+import plotly.graph_objects as go
 from sklearn.preprocessing import MinMaxScaler
 from tensorflow.keras.models import Sequential
 from tensorflow.keras.layers import LSTM, Dense
@@ -41,10 +41,10 @@ def run_ai_prediction():
                     st.error("❌ Not enough data for forecasting.")
                     return
 
+                df = df.dropna()
                 st.write("🧪 Adding Technical Indicators...")
-                df['RSI'] = RSIIndicator(close=df['Close'].squeeze(), window=14).rsi().fillna(method='bfill')
-                df['EMA_20'] = EMAIndicator(close=df['Close'].squeeze(), window=20).ema_indicator().fillna(method='bfill')
-                st.write("🧪 Adding and checking...")
+                df['RSI'] = RSIIndicator(close=df['Close'], window=14).rsi().fillna(method='bfill')
+                df['EMA_20'] = EMAIndicator(close=df['Close'], window=20).ema_indicator().fillna(method='bfill')
                 df = df.dropna()
 
                 st.write(f"✅ Data after indicators: {df.shape}")
@@ -54,14 +54,10 @@ def run_ai_prediction():
                 st.write("📊 Scaling close prices...")
                 scaler = MinMaxScaler()
                 scaled_close = scaler.fit_transform(df[['Close']])
-                st.write(f"🔍 Scaled close shape: {scaled_close.shape}")
 
                 # LSTM training data
                 st.write("🔄 Preparing LSTM sequences...")
                 X, y = prepare_lstm_data(scaled_close)
-                st.write(f"📊 X shape: {X.shape}")
-                st.write(f"📉 y shape: {y.shape}")
-
                 X = X.reshape((X.shape[0], X.shape[1], 1))
 
                 # Build LSTM model
@@ -83,27 +79,60 @@ def run_ai_prediction():
                     future_preds.append(next_pred)
                     last_seq = np.append(last_seq[:, 1:, :], [[[next_pred]]], axis=1)
 
-                st.write(f"📈 Raw predictions (scaled): {future_preds[:5]}...")
-
-                future_preds = np.array(future_preds).reshape(-1, 1)
-                st.write(f"📐 Shape before inverse_transform: {future_preds.shape}")
-
-                future_preds = scaler.inverse_transform(future_preds).flatten()
-                st.write(f"✅ Final predicted prices: {future_preds[:5]}...")
-
+                future_preds = scaler.inverse_transform(np.array(future_preds).reshape(-1, 1)).flatten()
                 future_dates = pd.bdate_range(start=df.index[-1] + timedelta(days=1), periods=pred_days)
                 forecast_df = pd.DataFrame({"Date": future_dates, "Predicted Close": future_preds})
 
                 st.success("✅ Forecast generated successfully!")
                 st.dataframe(forecast_df, use_container_width=True, hide_index=True)
 
-                # Plot forecast vs history
-                fig, ax = plt.subplots(figsize=(10, 4))
-                df['Close'].plot(ax=ax, label='Historical Close', color='blue')
-                forecast_df.set_index('Date')['Predicted Close'].plot(ax=ax, label='Forecast', color='orange')
-                ax.set_title(f"LSTM Forecast for {user_stock.upper()} for next {pred_days} days")
-                ax.legend()
-                st.pyplot(fig)
+                # Create candlestick chart with forecast
+                st.write("📊 Candlestick Chart with Forecast")
+                
+                # Create figure
+                fig = go.Figure()
+                
+                # Add candlestick
+                fig.add_trace(go.Candlestick(
+                    x=df.index,
+                    open=df['Open'],
+                    high=df['High'],
+                    low=df['Low'],
+                    close=df['Close'],
+                    name='Price History'
+                ))
+                
+                # Add EMA
+                fig.add_trace(go.Scatter(
+                    x=df.index,
+                    y=df['EMA_20'],
+                    line=dict(color='orange', width=1),
+                    name='20 EMA'
+                ))
+                
+                # Add forecast
+                fig.add_trace(go.Scatter(
+                    x=forecast_df['Date'],
+                    y=forecast_df['Predicted Close'],
+                    line=dict(color='green', width=2, dash='dot'),
+                    name='AI Forecast',
+                    mode='lines+markers'
+                ))
+                
+                # Update layout
+                fig.update_layout(
+                    title=f"{user_stock.upper()} Candlestick Chart with {pred_days}-Day AI Forecast",
+                    xaxis_title='Date',
+                    yaxis_title='Price',
+                    xaxis_rangeslider_visible=False,
+                    hovermode='x unified'
+                )
+                
+                st.plotly_chart(fig, use_container_width=True)
 
             except Exception as e:
                 st.error(f"❌ Error during AI prediction: {str(e)}")
+
+# Run the app
+if __name__ == "__main__":
+    run_ai_prediction()
