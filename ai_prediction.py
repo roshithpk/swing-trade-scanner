@@ -71,68 +71,71 @@ def add_technical_indicators(df):
 
 # --- TRADING SIGNAL GENERATION ---
 def generate_signals(df, forecast):
-    signals = []
-    reasons = []
+    try:
+        st.write("📥 Entering generate_signals function")  # Debug
+        signals = []
+        reasons = []
+        
+        st.write("📥 Accessing last row")  # Debug
+        last_row = df.iloc[-1].copy()  # Explicit copy to avoid reference issues
+        
+        st.write("📥 Accessing forecast")  # Debug
+        pred = forecast.iloc[0]['Predicted Close']
+        st.write(f"📥 Current price: {last_row['Close']}, Predicted: {pred}")  # Debug
 
-    st.write("📥 11")
-    last_row = df.iloc[-1]
-    st.write("📥 12")
-    pred = forecast.iloc[0]['Predicted Close']
+        # Signal 1: Price vs Prediction
+        price_diff = (pred - last_row['Close']) / last_row['Close']
+        if price_diff > 0.02:  # 2% above current
+            signals.append("BUY")
+            reasons.append(f"Predicted price {price_diff:.2%} higher than current")
+        elif price_diff < -0.02:  # 2% below current
+            signals.append("SELL")
+            reasons.append(f"Predicted price {abs(price_diff):.2%} lower than current")
+        else:
+            signals.append("HOLD")
+            reasons.append("Predicted price within 2% of current")
 
-    st.write("📥 1")
+        # Signal 2: RSI
+        st.write("📥 Checking RSI")  # Debug
+        if last_row['RSI'] < 30:
+            signals.append("BUY")
+            reasons.append(f"RSI {last_row['RSI']:.2f} indicates oversold")
+        elif last_row['RSI'] > 70:
+            signals.append("SELL")
+            reasons.append(f"RSI {last_row['RSI']:.2f} indicates overbought")
+
+        # Signal 3: MACD
+        st.write("📥 Checking MACD")  # Debug
+        if last_row['MACD'] > last_row['MACD_Signal']:
+            signals.append("BUY")
+            reasons.append("MACD above signal line (bullish)")
+        else:
+            signals.append("SELL")
+            reasons.append("MACD below signal line (bearish)")
+
+        # Signal 4: Bollinger Bands
+        st.write("📥 Checking Bollinger Bands")  # Debug
+        if last_row['Close'] < last_row['BB_Lower']:
+            signals.append("BUY")
+            reasons.append("Price below lower Bollinger Band")
+        elif last_row['Close'] > last_row['BB_Upper']:
+            signals.append("SELL")
+            reasons.append("Price above upper Bollinger Band")
+
+        st.write("📥 Counting signals")  # Debug
+        buy_count = signals.count("BUY")
+        sell_count = signals.count("SELL")
+        
+        final_signal = "BUY" if buy_count > sell_count else "SELL" if sell_count > buy_count else "HOLD"
+        
+        st.write("📥 Signal generation complete")  # Debug
+        return final_signal, list(set(reasons))  # Remove duplicate reasons
     
-    # Signal 1: Price vs Prediction
-    if pred > last_row['Close'] * 1.02:  # 2% above current
-        signals.append("BUY")
-        reasons.append("Predicted price is significantly higher than current")
-    elif pred < last_row['Close'] * 0.98:  # 2% below current
-        signals.append("SELL")
-        reasons.append("Predicted price is significantly lower than current")
-    else:
-        signals.append("HOLD")
-        reasons.append("Predicted price is close to current")
-
-    st.write("📥 2")
-    # Signal 2: RSI
-    if last_row['RSI'] < 30:
-        signals.append("BUY")
-        reasons.append("RSI indicates oversold condition")
-    elif last_row['RSI'] > 70:
-        signals.append("SELL")
-        reasons.append("RSI indicates overbought condition")
-    
-    st.write("📥 3")
-    # Signal 3: MACD
-    if last_row['MACD'] > last_row['MACD_Signal']:
-        signals.append("BUY")
-        reasons.append("MACD crossover bullish signal")
-    elif last_row['MACD'] < last_row['MACD_Signal']:
-        signals.append("SELL")
-        reasons.append("MACD crossover bearish signal")
-
-    st.write("📥 4")
-    # Signal 4: Bollinger Bands
-    if last_row['Close'] < last_row['BB_Lower']:
-        signals.append("BUY")
-        reasons.append("Price below lower Bollinger Band (potential rebound)")
-    elif last_row['Close'] > last_row['BB_Upper']:
-        signals.append("SELL")
-        reasons.append("Price above upper Bollinger Band (potential pullback)")
-
-    st.write("📥 5")
-    # Count signals
-    buy_count = signals.count("BUY")
-    sell_count = signals.count("SELL")
-    
-    if buy_count > sell_count:
-        final_signal = "BUY"
-    elif sell_count > buy_count:
-        final_signal = "SELL"
-    else:
-        final_signal = "HOLD"
-    
-    return final_signal, reasons
-
+    except Exception as e:
+        st.error(f"❌ Error in generate_signals: {str(e)}")
+        st.error(f"❌ DataFrame shape: {df.shape if 'df' in locals() else 'DF not available'}")
+        st.error(f"❌ Forecast shape: {forecast.shape if 'forecast' in locals() else 'Forecast not available'}")
+        return "ERROR", [f"Error generating signals: {str(e)}"]
 # --- MAIN FUNCTION ---
 def run_ai_prediction():
     st.markdown("---")
