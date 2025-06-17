@@ -36,10 +36,10 @@ def add_technical_indicators(df):
             return None
         
         # Convert to pandas Series with proper index
-        close = pd.Series(df['Close'], index=df.index)
-        high = pd.Series(df['High'], index=df.index)
-        low = pd.Series(df['Low'], index=df.index)
-        volume = pd.Series(df['Volume'], index=df.index)
+        close = pd.Series(df['Close'].values.flatten(), index=df.index)
+        high = pd.Series(df['High'].values.flatten(), index=df.index)
+        low = pd.Series(df['Low'].values.flatten(), index=df.index)
+        volume = pd.Series(df['Volume'].values.flatten(), index=df.index)
 
         # Calculate each indicator with individual error handling
         indicators = {
