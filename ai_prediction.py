@@ -84,18 +84,73 @@ def add_technical_indicators(df):
 # --- TRADING SIGNALS ---
 def generate_signals(df, forecast):
     try:
+        signals = []
+        reasons = []
         last_row = df.iloc[-1]
+        
+        # Explicitly convert to float to avoid Series comparison issues
         current_close = float(last_row['Close'])
         pred_close = float(forecast['Predicted Close'].iloc[0])
-
-        if pred_close > current_close:
+        
+        # 1. Price vs Prediction (Give model prediction double weight)
+        price_diff = (pred_close - current_close) / current_close
+        
+        if price_diff > 0.02:
+            signals.append("BUY")
+            reasons.append(f"Predicted price {price_diff:.2%} higher")
+        else:
+            signals.append("HOLD")
+            reasons.append("Predicted price not significantly higher")
+        
+        # 2. RSI
+        if 'RSI' in df.columns:
+            rsi = float(last_row['RSI'])
+            if rsi < 30:
+                signals.append("BUY")
+                reasons.append(f"RSI {rsi:.1f} (oversold)")
+            elif rsi > 70:
+                signals.append("SELL")
+                reasons.append(f"RSI {rsi:.1f} (overbought)")
+        
+        # 3. MACD
+        if 'MACD' in df.columns and 'MACD_Signal' in df.columns:
+            macd = float(last_row['MACD'])
+            macd_signal = float(last_row['MACD_Signal'])
+            if macd > macd_signal:
+                signals.append("BUY")
+                reasons.append("MACD above signal line")
+            else:
+                signals.append("SELL")
+                reasons.append("MACD below signal line")
+        
+        # 4. Bollinger Bands
+        if 'BB_Lower' in df.columns and 'BB_Upper' in df.columns:
+            bb_lower = float(last_row['BB_Lower'])
+            bb_upper = float(last_row['BB_Upper'])
+            if current_close < bb_lower:
+                signals.append("BUY")
+                reasons.append("Price below lower band")
+            elif current_close > bb_upper:
+                signals.append("SELL")
+                reasons.append("Price above upper band")
+        
+        # Determine final signal
+        buy_count = signals.count("BUY")
+        sell_count = signals.count("SELL")
+        
+        if buy_count > sell_count:
             final_signal = "BUY"
-            reasons = [f"Predicted price ₹{pred_close:.2f} is higher than current price ₹{current_close:.2f}"]
+        elif sell_count > buy_count:
+            final_signal = "SELL"
         else:
             final_signal = "HOLD"
-            reasons = [f"Predicted price ₹{pred_close:.2f} is not higher than current price ₹{current_close:.2f}"]
+        
+        return final_signal, list(set(reasons))
+    
+    except Exception as e:
+        st.error(f"Signal generation failed: {str(e)}")
+        return "ERROR", ["Could not generate signals"]
 
-        return final_signal, reasons
 # --- MAIN APP ---
 def run_ai_prediction():
     st.title("📈 AI Stock Prediction Dashboard")
