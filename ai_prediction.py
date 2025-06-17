@@ -92,13 +92,14 @@ def generate_signals(df, forecast):
         current_close = float(last_row['Close'])
         pred_close = float(forecast['Predicted Close'].iloc[0])
         
-        # 1. Price vs Prediction
+        # 1. Price vs Prediction (Give model prediction double weight)
         price_diff = (pred_close - current_close) / current_close
+        
         if price_diff > 0.02:
-            signals.append("BUY")
+            signals.extend(["BUY", "BUY"])
             reasons.append(f"Predicted price {price_diff:.2%} higher")
         elif price_diff < -0.02:
-            signals.append("SELL") 
+            signals.extend(["SELL", "SELL"])
             reasons.append(f"Predicted price {abs(price_diff):.2%} lower")
         else:
             signals.append("HOLD")
