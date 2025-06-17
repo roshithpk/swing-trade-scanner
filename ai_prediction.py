@@ -23,6 +23,7 @@ def prepare_lstm_data(data, n_steps=30):
 # --- TECHNICAL INDICATORS ---
 def add_technical_indicators(df):
     # Momentum Indicators
+    st.write("Asadad")
     df['RSI'] = RSIIndicator(close=df['Close'], window=14).rsi()
     stoch = StochasticOscillator(high=df['High'], low=df['Low'], close=df['Close'], window=14)
     df['Stoch_%K'] = stoch.stoch()
