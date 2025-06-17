@@ -5,6 +5,18 @@ from ta.momentum import RSIIndicator
 from ta.trend import EMAIndicator
 import ai_prediction
 
+# --- CUSTOM SMA RSI FUNCTION ---
+def sma_rsi(series, window=14):
+    delta = series.diff()
+    gain = delta.where(delta > 0, 0)
+    loss = -delta.where(delta < 0, 0)
+    avg_gain = gain.rolling(window=window).mean()
+    avg_loss = loss.rolling(window=window).mean()
+    rs = avg_gain / avg_loss
+    rsi = 100 - (100 / (1 + rs))
+    return rsi
+
+
 if "page" not in st.session_state:
     st.session_state.page = "main"
     
@@ -61,7 +73,7 @@ def scan_stock(ticker):
             return None
 
         ema_20 = EMAIndicator(close=close_prices, window=20).ema_indicator()
-        rsi = RSIIndicator(close=close_prices, window=14).rsi()
+        rsi = sma_rsi(close_prices, window=14)
 
         latest_close = close_prices.iloc[-1]
         latest_volume = volumes.iloc[-1]
@@ -116,7 +128,7 @@ if user_stock:
             volumes = pd.Series(data["Volume"].values.flatten(), index=data.index)
 
             ema_20 = EMAIndicator(close=close_prices, window=20).ema_indicator()
-            rsi = RSIIndicator(close=close_prices, window=14).rsi()
+            rsi = sma_rsi(close_prices, window=14)
 
             latest_close = close_prices.iloc[-1]
             latest_volume = volumes.iloc[-1]
