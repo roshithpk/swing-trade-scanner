@@ -8,5 +8,5 @@ scikit-learn
 plotly
 matplotlib
 prophet
-tensorflow
+tensorflow==2.12.0
 numpy
