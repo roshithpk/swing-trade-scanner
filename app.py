@@ -146,24 +146,18 @@ if user_stock:
     except Exception as e:
         st.error(f"Error fetching data for {user_stock.upper()}: {str(e)}")
         
-# --- AI BUTTON (Always visible) ---
+# --- AI BUTTON ---
 st.markdown("---")
 st.subheader("🤖 Try AI-Based Prediction")
 
-if "ai_mode" not in st.session_state:
-    st.session_state.ai_mode = False
+if st.button("🔮 AI-Based Prediction"):
+    st.session_state.page = "ai"
 
-# Only show button if not in AI mode
-if not st.session_state.ai_mode:
-    if st.button("🔮 AI-Based Prediction"):
-        st.session_state.ai_mode = True
-        st.experimental_rerun()  # Safe here because ai_mode will be True on next run
-else:
-    # When in AI mode, run ai_predictor and stop further execution
-    import ai_predictor
-    ai_predictor.run()
-    st.session_state.ai_mode = False  # Reset the mode after running
-    st.stop()
+# --- PAGE ROUTING LOGIC ---
+if st.session_state.get("page") == "ai":
+    import AI_Prediction
+    AI_Prediction.run()
+    st.stop()  # Prevents rest of app.py from running
 
 
 # --- FOOTER ---
