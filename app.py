@@ -154,6 +154,11 @@ if st.button("🔮 AI-Based Prediction"):
     st.session_state["ai_mode"] = True
     st.experimental_rerun()
 
+if "ai_mode" in st.session_state and st.session_state["ai_mode"]:
+    st.session_state["ai_mode"] = False
+    import ai_predictor
+    ai_predictor.run()
+    st.stop()
 
 
 # --- FOOTER ---
