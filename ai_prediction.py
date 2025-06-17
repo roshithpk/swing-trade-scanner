@@ -22,59 +22,78 @@ def prepare_lstm_data(data, n_steps=30):
 
 # --- TECHNICAL INDICATORS ---
 def add_technical_indicators(df):
-    # Convert to 1D arrays explicitly
-    def ensure_1d(series):
-        if hasattr(series, 'values'):
-            return series.values.flatten()
-        return np.array(series).flatten()
-    
-    close = ensure_1d(df['Close'])
-    high = ensure_1d(df['High'])
-    low = ensure_1d(df['Low'])
-    volume = ensure_1d(df['Volume'])
-
     try:
+        # Make sure we have enough data
+        if len(df) < 20:  # Minimum window size for indicators
+            st.warning("Not enough data points for technical indicators")
+            return df
+        
+        # Convert to pandas Series if they aren't already
+        close = pd.Series(df['Close'])
+        high = pd.Series(df['High'])
+        low = pd.Series(df['Low'])
+        volume = pd.Series(df['Volume'])
+
         # Momentum Indicators
-        df['RSI'] = RSIIndicator(close=pd.Series(close), window=14).rsi()
+        df['RSI'] = RSIIndicator(close=close, window=14).rsi()
+        
+        # Stochastic Oscillator
         stoch = StochasticOscillator(
-            high=pd.Series(high),
-            low=pd.Series(low),
-            close=pd.Series(close),
-            window=14
+            high=high,
+            low=low,
+            close=close,
+            window=14,
+            smooth_window=3
         )
         df['Stoch_%K'] = stoch.stoch()
         df['Stoch_%D'] = stoch.stoch_signal()
         
         # Trend Indicators
-        df['EMA_20'] = EMAIndicator(close=pd.Series(close), window=20).ema_indicator()
-        df['EMA_50'] = EMAIndicator(close=pd.Series(close), window=50).ema_indicator()
-        macd = MACD(close=pd.Series(close))
+        df['EMA_20'] = EMAIndicator(close=close, window=20).ema_indicator()
+        df['EMA_50'] = EMAIndicator(close=close, window=50).ema_indicator()
+        
+        # MACD
+        macd = MACD(close=close)
         df['MACD'] = macd.macd()
         df['MACD_Signal'] = macd.macd_signal()
+        df['MACD_Hist'] = macd.macd_diff()
+        
+        # ADX
         df['ADX'] = ADXIndicator(
-            high=pd.Series(high),
-            low=pd.Series(low),
-            close=pd.Series(close),
+            high=high,
+            low=low,
+            close=close,
             window=14
         ).adx()
         
-        # Volatility Indicators
-        bb = BollingerBands(close=pd.Series(close), window=20, window_dev=2)
+        # Bollinger Bands
+        bb = BollingerBands(
+            close=close,
+            window=20,
+            window_dev=2
+        )
         df['BB_Upper'] = bb.bollinger_hband()
+        df['BB_Middle'] = bb.bollinger_mavg()
         df['BB_Lower'] = bb.bollinger_lband()
         
         # Volume Indicators
         df['VWAP'] = VolumeWeightedAveragePrice(
-            high=pd.Series(high),
-            low=pd.Series(low),
-            close=pd.Series(close),
-            volume=pd.Series(volume),
+            high=high,
+            low=low,
+            close=close,
+            volume=volume,
             window=14
         ).volume_weighted_average_price()
         
-        return df.dropna()
+        # Fill any NA values that might have been created
+        df.fillna(method='ffill', inplace=True)
+        df.fillna(method='bfill', inplace=True)
+        
+        return df
+    
     except Exception as e:
-        st.error(f"Technical indicator error: {str(e)}")
+        st.error(f"Error calculating technical indicators: {str(e)}")
+        # Return the original DF if indicators fail
         return df
 
 # --- TRADING SIGNALS ---
@@ -82,23 +101,23 @@ def generate_signals(df, forecast):
     try:
         signals = []
         reasons = []
-        last_row = df.iloc[-1].copy()
+        last_row = df.iloc[-1]
         pred = forecast.iloc[0]['Predicted Close']
         
-        # Price vs Prediction
+        # 1. Price vs Prediction Signal
         price_diff = (pred - last_row['Close']) / last_row['Close']
         if price_diff > 0.02:
             signals.append("BUY")
-            reasons.append(f"Predicted +{price_diff:.2%} above current")
+            reasons.append(f"Predicted price {price_diff:.2%} higher than current")
         elif price_diff < -0.02:
-            signals.append("SELL") 
-            reasons.append(f"Predicted {abs(price_diff):.2%} below current")
+            signals.append("SELL")
+            reasons.append(f"Predicted price {abs(price_diff):.2%} lower than current")
         else:
             signals.append("HOLD")
-            reasons.append("Prediction within 2% range")
+            reasons.append("Predicted price within 2% of current")
         
-        # RSI
-        if 'RSI' in df.columns and not pd.isna(last_row['RSI']):
+        # 2. RSI Signal
+        if 'RSI' in df.columns:
             if last_row['RSI'] < 30:
                 signals.append("BUY")
                 reasons.append(f"RSI {last_row['RSI']:.1f} (oversold)")
@@ -106,34 +125,40 @@ def generate_signals(df, forecast):
                 signals.append("SELL")
                 reasons.append(f"RSI {last_row['RSI']:.1f} (overbought)")
         
-        # MACD
+        # 3. MACD Signal
         if 'MACD' in df.columns and 'MACD_Signal' in df.columns:
             if last_row['MACD'] > last_row['MACD_Signal']:
                 signals.append("BUY")
-                reasons.append("MACD above signal line")
+                reasons.append("MACD above signal line (bullish)")
             else:
                 signals.append("SELL")
-                reasons.append("MACD below signal line")
+                reasons.append("MACD below signal line (bearish)")
         
-        # Bollinger Bands
+        # 4. Bollinger Bands Signal
         if 'BB_Lower' in df.columns and 'BB_Upper' in df.columns:
             if last_row['Close'] < last_row['BB_Lower']:
                 signals.append("BUY")
-                reasons.append("Price below lower band")
+                reasons.append("Price below lower Bollinger Band")
             elif last_row['Close'] > last_row['BB_Upper']:
                 signals.append("SELL")
-                reasons.append("Price above upper band")
+                reasons.append("Price above upper Bollinger Band")
         
         # Determine final signal
         buy_count = signals.count("BUY")
         sell_count = signals.count("SELL")
-        final_signal = "BUY" if buy_count > sell_count else "SELL" if sell_count > buy_count else "HOLD"
         
-        return final_signal, list(set(reasons))
+        if buy_count > sell_count:
+            final_signal = "BUY"
+        elif sell_count > buy_count:
+            final_signal = "SELL"
+        else:
+            final_signal = "HOLD"
+        
+        return final_signal, list(set(reasons))  # Remove duplicate reasons
     
     except Exception as e:
-        st.error(f"Signal generation error: {str(e)}")
-        return "ERROR", [str(e)]
+        st.error(f"Error generating signals: {str(e)}")
+        return "ERROR", ["Could not generate signals"]
 
 # --- MAIN APP ---
 def run_ai_prediction():
@@ -149,33 +174,36 @@ def run_ai_prediction():
         
         with st.spinner("Fetching data..."):
             try:
-                # Data Collection
+                # 1. Data Collection
                 df = yf.download(ticker, period="6mo", interval="1d", progress=False)
                 if df.empty:
                     st.error("No data found for this stock")
                     return
                 
-                # Technical Indicators
+                st.write(f"📊 Retrieved {len(df)} days of data")
+                
+                # 2. Add Technical Indicators
                 df = add_technical_indicators(df)
                 if df.empty:
-                    st.error("Technical indicators calculation failed")
+                    st.error("Failed to calculate technical indicators")
                     return
                 
-                # Verify all required columns exist
-                required_cols = ['Close', 'RSI', 'EMA_20', 'MACD', 'BB_Upper', 'BB_Lower']
-                missing_cols = [col for col in required_cols if col not in df.columns]
-                if missing_cols:
-                    st.error(f"Missing technical indicators: {missing_cols}")
+                # 3. Verify we have all required columns
+                required_indicators = ['RSI', 'EMA_20', 'MACD', 'BB_Upper', 'BB_Lower']
+                missing = [ind for ind in required_indicators if ind not in df.columns]
+                if missing:
+                    st.error(f"Missing indicators: {', '.join(missing)}")
                     return
                 
-                # Model Training
-                features = required_cols
+                # 4. Prepare data for LSTM
+                features = ['Close', 'RSI', 'EMA_20', 'MACD', 'BB_Upper', 'BB_Lower']
                 scaler = MinMaxScaler()
                 scaled_data = scaler.fit_transform(df[features])
                 
                 X, y = prepare_lstm_data(scaled_data)
                 X = X.reshape((X.shape[0], X.shape[1], len(features)))
                 
+                # 5. Build and train LSTM model
                 model = Sequential([
                     LSTM(128, return_sequences=True, input_shape=(X.shape[1], X.shape[2])),
                     Dropout(0.2),
@@ -186,35 +214,36 @@ def run_ai_prediction():
                 model.compile(optimizer='adam', loss='mse')
                 model.fit(X, y, epochs=50, batch_size=32, verbose=0)
                 
-                # Prediction
+                # 6. Generate predictions
                 last_seq = scaled_data[-30:]
                 future_preds = []
                 for _ in range(pred_days):
                     next_pred = model.predict(last_seq.reshape(1, 30, len(features)), verbose=0)[0,0]
                     future_preds.append(next_pred)
-                    # Maintain the same shape for next prediction
+                    # Maintain sequence shape with new prediction
                     new_row = np.zeros(len(features))
-                    new_row[0] = next_pred  # Only update the Close prediction
+                    new_row[0] = next_pred  # Only update Close price prediction
                     last_seq = np.vstack([last_seq[1:], new_row])
                 
-                # Inverse transform
+                # 7. Inverse transform predictions
                 dummy = np.zeros((len(future_preds), len(features)))
                 dummy[:,0] = future_preds
                 future_preds = scaler.inverse_transform(dummy)[:,0]
                 
+                # 8. Create forecast DataFrame
                 future_dates = pd.bdate_range(start=df.index[-1] + timedelta(days=1), periods=pred_days)
                 forecast_df = pd.DataFrame({
                     "Date": future_dates,
                     "Predicted Close": future_preds
                 })
                 
-                # Generate Signals
+                # 9. Generate trading signals
                 signal, reasons = generate_signals(df, forecast_df)
                 
-                # Display Results
-                st.success("Forecast Complete!")
+                # 10. Display results
+                st.success("🎯 Forecast Complete!")
                 
-                # Candlestick Chart
+                # Price chart with forecast
                 fig = go.Figure()
                 fig.add_trace(go.Candlestick(
                     x=df.index,
@@ -231,12 +260,12 @@ def run_ai_prediction():
                     name="Forecast"
                 ))
                 fig.update_layout(
-                    title=f"{user_stock} Price & Forecast",
+                    title=f"{user_stock} Price & {pred_days}-Day Forecast",
                     xaxis_rangeslider_visible=False
                 )
                 st.plotly_chart(fig, use_container_width=True)
                 
-                # Signal Card
+                # Trading signal
                 if signal == "BUY":
                     st.success(f"✅ SIGNAL: {signal}")
                 elif signal == "SELL":
@@ -248,13 +277,16 @@ def run_ai_prediction():
                 for reason in reasons:
                     st.write(f"- {reason}")
                 
-                # Metrics
+                # Key metrics
                 col1, col2, col3 = st.columns(3)
                 col1.metric("Current Price", f"₹{df['Close'].iloc[-1]:.2f}")
-                col2.metric("Predicted Price", f"₹{forecast_df['Predicted Close'].iloc[0]:.2f}",
-                          f"{((forecast_df['Predicted Close'].iloc[0]/df['Close'].iloc[-1])-1)*100:.2f}%")
-                if 'RSI' in df.columns:
-                    col3.metric("RSI", f"{df['RSI'].iloc[-1]:.1f}")
+                col2.metric("Predicted Price", f"₹{forecast_df['Predicted Close'].iloc[0]:.2f}", 
+                           f"{((forecast_df['Predicted Close'].iloc[0]/df['Close'].iloc[-1]-1)*100:.2f}%")
+                col3.metric("RSI", f"{df['RSI'].iloc[-1]:.1f}")
+                
+                # Show forecast table
+                st.subheader("Forecast Details:")
+                st.dataframe(forecast_df.set_index('Date'))
                 
             except Exception as e:
                 st.error(f"Prediction failed: {str(e)}")
