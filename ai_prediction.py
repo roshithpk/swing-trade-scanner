@@ -73,8 +73,10 @@ def add_technical_indicators(df):
 def generate_signals(df, forecast):
     signals = []
     reasons = []
-    
+
+    st.write("📥 11")
     last_row = df.iloc[-1]
+    st.write("📥 12")
     pred = forecast.iloc[0]['Predicted Close']
 
     st.write("📥 1")
