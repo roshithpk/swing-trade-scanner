@@ -38,8 +38,8 @@ def run_ai_prediction():
             y = recent_data["Close"].to_numpy().flatten()  # Ensure 1D array
             
             # Optional debug
-            # st.write("Shape of X:", X.shape)
-            # st.write("Shape of y:", y.shape)
+            st.write("Shape of X:", X.shape)
+            st.write("Shape of y:", y.shape)
             
             model = LinearRegression()
             model.fit(X, y)
