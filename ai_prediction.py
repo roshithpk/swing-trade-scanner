@@ -41,6 +41,22 @@ def run_ai_prediction():
                 st.markdown("#### 📋 Forecasted Prices:")
                 st.dataframe(pred_range.tail(10), hide_index=True, use_container_width=True)
 
+                st.write("📊 Shape of df (historical):", df.shape)
+                st.write("📊 Shape of forecast_df:", forecast_df.shape)
+                st.write("📊 Shape of merged:", merged.shape)
+                
+                st.write("📊 Sample forecast_df:", forecast_df.tail(3))
+                st.write("📊 Sample merged:", merged.tail(3))
+                
+                # Also print pred_range that’s being plotted
+                pred_range = merged[merged["Predicted"].notnull() & (merged["Date"] > df["Date"].max())]
+                
+                st.write("📊 pred_range shape:", pred_range.shape)
+                st.write("📊 pred_range.dtypes:", pred_range.dtypes)
+                st.write("📊 pred_range sample:", pred_range.tail(3))
+
+
+                
                 # Plot candlestick + forecast
                 fig = go.Figure()
 
