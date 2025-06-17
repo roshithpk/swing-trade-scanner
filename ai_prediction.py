@@ -300,29 +300,27 @@ def run_ai_prediction():
                 table_height = min(len(forecast_df), 8) * 38 + 50
                 
                 # --- Render AgGrid ---
-                with st.container():
-                    st.markdown(
-                        """
-                        <style>
-                        .ag-theme-balham {
-                            max-width: 300px;  /* Adjust width as needed */
-                            margin-left: auto;
-                            margin-right: auto;
-                        }
-                        </style>
-                        """,
-                        unsafe_allow_html=True
-                    )
+                st.subheader("Forecast Details:")
                 
-                    st.subheader("Forecast Details:")
+                # Start a container div to control width
+                st.markdown(
+                    """
+                    <div style="max-width: 300px; margin: auto;">
+                    """,
+                    unsafe_allow_html=True
+                )
                 
-                    AgGrid(
-                        forecast_df,
-                        gridOptions=grid_options,
-                        height=table_height,
-                        theme="balham",
-                        fit_columns_on_grid_load=False
-                    )
+                # Render AgGrid inside this div
+                AgGrid(
+                    forecast_df,
+                    gridOptions=grid_options,
+                    height=table_height,
+                    theme="balham",
+                    fit_columns_on_grid_load=False
+                )
+                
+                # Close the div
+                st.markdown("</div>", unsafe_allow_html=True)
 
                                 
             except Exception as e:
