@@ -33,9 +33,7 @@ st.subheader("📂 Select Stock Category to Scan")
 categories = ["All"] + sorted(stock_df["Category"].dropna().unique())
 selected_category = st.selectbox("Category", categories, index=0)
 
-if st.button("🔮 AI-Based Prediction"):
-    st.session_state["ai_mode"] = True
-    st.experimental_rerun()
+
 
 
 if selected_category == "All":
@@ -105,6 +103,10 @@ st.markdown("---")
 st.subheader("🔎 Analyze a Specific Stock")
 user_stock = st.text_input("Enter NSE Stock Symbol (e.g., INFY)")
 
+
+if st.button("🔮 AI-Based Prediction"):
+    st.session_state["ai_mode"] = True
+    st.experimental_rerun()
 if user_stock:
     full_ticker = user_stock.upper().strip() + ".NS"
     try:
