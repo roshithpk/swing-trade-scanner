@@ -31,9 +31,9 @@ def run_ai_prediction():
         if st.button("🚀 Run AI Forecast") and user_stock:
             ticker = user_stock.upper().strip() + ".NS"
             try:
-                st.write(f"📥 Fetching data for: `{ticker}`")
                 df = yf.download(ticker, period="1y", progress=False)
-                st.write("✅ Raw data:", df.tail())
+                st.write("✅ Raw data fetched:")
+                st.dataframe(df.tail(5))
 
                 if df.empty or len(df) < 90:
                     st.error("❌ Not enough data for forecasting.")
@@ -43,40 +43,61 @@ def run_ai_prediction():
                 df['RSI'] = RSIIndicator(close=df['Close'], window=14).rsi()
                 df['EMA_20'] = EMAIndicator(close=df['Close'], window=20).ema_indicator()
                 df = df.dropna()
-                st.write("📊 Data with RSI and EMA:", df.tail())
 
+                st.write("📉 Processed data with indicators:")
+                st.dataframe(df.tail(5))
+
+                # --- Scaling ---
                 scaler = MinMaxScaler()
                 scaled_close = scaler.fit_transform(df[['Close']])
-                st.write("📉 Scaled close sample:", scaled_close[-5:])
+                st.write("🔄 Scaled close shape:", scaled_close.shape)
 
-                # Prepare LSTM sequences
+                # --- Prepare LSTM data ---
+                def prepare_lstm_data(series, n_steps=30):
+                    X, y = [], []
+                    for i in range(n_steps, len(series)):
+                        X.append(series[i-n_steps:i])
+                        y.append(series[i])
+                    return np.array(X), np.array(y)
+
                 X, y = prepare_lstm_data(scaled_close)
-                st.write(f"🧠 Training data shape - X: {X.shape}, y: {y.shape}")
+                st.write("📊 X shape:", X.shape)
+                st.write("📉 y shape:", y.shape)
 
                 X = X.reshape((X.shape[0], X.shape[1], 1))
 
+                # --- LSTM Model ---
                 model = Sequential()
                 model.add(LSTM(50, activation='relu', input_shape=(X.shape[1], 1)))
                 model.add(Dense(1))
                 model.compile(optimizer='adam', loss='mse')
                 model.fit(X, y, epochs=20, verbose=0)
-                st.success("✅ Model trained!")
 
+                # --- Forecast ---
                 last_seq = scaled_close[-30:].reshape((1, 30, 1))
                 future_preds = []
                 for _ in range(pred_days):
-                    next_pred = model.predict(last_seq)[0, 0]
+                    next_pred = model.predict(last_seq, verbose=0)[0, 0]
                     future_preds.append(next_pred)
                     last_seq = np.append(last_seq[:, 1:, :], [[[next_pred]]], axis=1)
 
-                future_preds = scaler.inverse_transform(np.array(future_preds).reshape(-1, 1)).flatten()
-                st.write("🔮 Predicted values:", future_preds)
+                st.write("🔮 Raw future preds (scaled):", future_preds)
 
+                # --- Inverse Transform ---
+                future_preds_arr = np.array(future_preds).reshape(-1, 1)
+                st.write("🔁 Future preds array shape:", future_preds_arr.shape)
+
+                future_preds = scaler.inverse_transform(future_preds_arr).flatten()
+                st.write("✅ Final future preds:", future_preds)
+
+                # --- Build Forecast DataFrame ---
                 future_dates = pd.bdate_range(start=df.index[-1] + timedelta(days=1), periods=pred_days)
                 forecast_df = pd.DataFrame({"Date": future_dates, "Predicted Close": future_preds})
-                st.dataframe(forecast_df)
 
-                # Plot actual + forecast
+                st.success("✅ Forecast generated successfully!")
+                st.dataframe(forecast_df, use_container_width=True, hide_index=True)
+
+                # --- Plot ---
                 fig, ax = plt.subplots(figsize=(10, 4))
                 df['Close'].plot(ax=ax, label='Historical Close', color='blue')
                 forecast_df.set_index('Date')['Predicted Close'].plot(ax=ax, label='Forecast', color='orange')
