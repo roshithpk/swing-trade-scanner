@@ -2,95 +2,80 @@ import streamlit as st
 import yfinance as yf
 import pandas as pd
 import numpy as np
-from sklearn.linear_model import LinearRegression
+from datetime import datetime, timedelta
 import matplotlib.pyplot as plt
-import plotly.graph_objects as go
-from datetime import timedelta
+from sklearn.preprocessing import MinMaxScaler
+from keras.models import Sequential
+from keras.layers import LSTM, Dense
+from ta.momentum import RSIIndicator
+from ta.trend import EMAIndicator
 
+# --- LSTM MODEL HELPER ---
+def prepare_lstm_data(series, n_steps=30):
+    X, y = [], []
+    for i in range(n_steps, len(series)):
+        X.append(series[i-n_steps:i])
+        y.append(series[i])
+    return np.array(X), np.array(y)
 
+# --- MAIN FUNCTION TO RUN AI PREDICTION ---
 def run_ai_prediction():
     st.markdown("---")
-    st.subheader("🧠 AI-Based Stock Price Prediction")
-    st.caption("Use AI to forecast closing prices for the next few days")
+    st.header("🤖 AI Based Price Forecast")
+    st.caption("Uses LSTM model with technical indicators to forecast closing price")
 
-    stock_input = st.text_input("Enter NSE Stock Symbol (e.g., INFY)", key="ai_stock_input")
-    forecast_days = st.slider("Select forecast period (days)", 1, 15, 5, key="forecast_slider")
+    with st.expander("🔮 AI Prediction Panel", expanded=False):
+        user_stock = st.text_input("Enter NSE Stock Symbol for Prediction (e.g., INFY)")
+        pred_days = st.slider("Prediction Horizon (days)", min_value=5, max_value=15, value=10)
 
-    if stock_input:
-        try:
-            full_ticker = stock_input.upper().strip() + ".NS"
-            data = yf.download(full_ticker, period="6mo", progress=False)
+        if st.button("🚀 Run AI Forecast") and user_stock:
+            ticker = user_stock.upper().strip() + ".NS"
+            try:
+                df = yf.download(ticker, period="1y", progress=False)
+                if df.empty or len(df) < 90:
+                    st.error("❌ Not enough data for forecasting.")
+                    return
 
-            if data.empty or len(data) < 30:
-                st.warning("⚠️ Not enough data for prediction.")
-                return
+                df = df.dropna()
+                df['RSI'] = RSIIndicator(close=df['Close'], window=14).rsi()
+                df['EMA_20'] = EMAIndicator(close=df['Close'], window=20).ema_indicator()
+                df = df.dropna()
 
-            df = data.copy()
-            df.reset_index(inplace=True)
-            df = df[["Date", "Open", "High", "Low", "Close"]].dropna()
+                scaler = MinMaxScaler()
+                scaled_close = scaler.fit_transform(df[['Close']])
 
-            df["Date"] = pd.to_datetime(df["Date"])
-            df["Days"] = (df["Date"] - df["Date"].min()).dt.days
+                # Prepare LSTM sequences
+                X, y = prepare_lstm_data(scaled_close)
+                X = X.reshape((X.shape[0], X.shape[1], 1))
 
-            # Prepare input for model
-            X = df[["Days"]].values
-            y = df[["Close"]].values
+                model = Sequential()
+                model.add(LSTM(50, activation='relu', input_shape=(X.shape[1], 1)))
+                model.add(Dense(1))
+                model.compile(optimizer='adam', loss='mse')
+                model.fit(X, y, epochs=20, verbose=0)
 
-            st.write(f"\U0001F4CA X shape: {X.shape}")
-            st.write(f"\U0001F4C9 y shape: {y.shape}")
+                last_seq = scaled_close[-30:].reshape((1, 30, 1))
+                future_preds = []
+                for _ in range(pred_days):
+                    next_pred = model.predict(last_seq)[0, 0]
+                    future_preds.append(next_pred)
+                    last_seq = np.append(last_seq[:, 1:, :], [[[next_pred]]], axis=1)
 
-            # Train the model
-            model = LinearRegression()
-            model.fit(X, y)
+                future_preds = scaler.inverse_transform(np.array(future_preds).reshape(-1, 1)).flatten()
 
-            last_day = df["Days"].iloc[-1]
-            future_days = np.array([last_day + i for i in range(1, forecast_days + 1)]).reshape(-1, 1)
-            future_dates = [df["Date"].iloc[-1] + timedelta(days=i) for i in range(1, forecast_days + 1)]
+                future_dates = pd.bdate_range(start=df.index[-1] + timedelta(days=1), periods=pred_days)
+                forecast_df = pd.DataFrame({"Date": future_dates, "Predicted Close": future_preds})
 
-            future_preds = model.predict(future_days).flatten()
+                st.success("✅ Forecast generated successfully!")
+                st.dataframe(forecast_df, use_container_width=True, hide_index=True)
 
-            # Create forecast DataFrame
-            forecast_df = pd.DataFrame({
-                "Date": future_dates,
-                "Predicted Close": future_preds
-            })
+                # Plot actual + forecast
+                fig, ax = plt.subplots(figsize=(10, 4))
+                df['Close'].plot(ax=ax, label='Historical Close', color='blue')
+                forecast_df.set_index('Date')['Predicted Close'].plot(ax=ax, label='Forecast', color='orange')
+                ax.set_title(f"LSTM Forecast for {user_stock.upper()} for next {pred_days} days")
+                ax.legend()
+                st.pyplot(fig)
 
-            # Display table
-            st.markdown("#### 📊 AI Forecast Table")
-            st.dataframe(forecast_df.style.format({"Predicted Close": "₹{:.2f}"}), hide_index=True)
-
-            # Plot candlestick chart + predicted line
-            st.markdown("#### 📈 Price Chart with AI Forecast")
-            fig = go.Figure()
-
-            # Historical candlestick
-            fig.add_trace(go.Candlestick(
-                x=df["Date"],
-                open=df["Open"],
-                high=df["High"],
-                low=df["Low"],
-                close=df["Close"],
-                name="Actual"
-            ))
-
-            # Forecast line
-            fig.add_trace(go.Scatter(
-                x=forecast_df["Date"],
-                y=forecast_df["Predicted Close"],
-                mode="lines+markers",
-                name="AI Forecast",
-                line=dict(color="orange", width=2, dash="dash")
-            ))
-
-            fig.update_layout(
-                xaxis_title="Date",
-                yaxis_title="Price (₹)",
-                template="plotly_white",
-                showlegend=True,
-                height=500
-            )
-
-            st.plotly_chart(fig, use_container_width=True)
-
-        except Exception as e:
-            st.error(f"Error during AI prediction: {str(e)}")
+            except Exception as e:
+                st.error(f"Error during AI prediction: {str(e)}")
