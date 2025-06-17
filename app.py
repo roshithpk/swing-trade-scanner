@@ -3,6 +3,7 @@ import pandas as pd
 import yfinance as yf
 from ta.momentum import RSIIndicator
 from ta.trend import EMAIndicator
+import ai_prediction
 
 if "page" not in st.session_state:
     st.session_state.page = "main"
@@ -149,17 +150,9 @@ if user_stock:
         st.error(f"Error fetching data for {user_stock.upper()}: {str(e)}")
         
 # --- AI BUTTON ---
+# Call AI section
 st.markdown("---")
-st.subheader("🤖 Try AI-Based Prediction")
-
-if st.button("🔮 AI-Based Prediction"):
-    st.session_state.page = "ai"
-
-# --- PAGE ROUTING LOGIC ---
-if st.session_state.get("page") == "ai":
-    import AI_Prediction
-    AI_Prediction.run()
-    st.stop()  # Prevents rest of app.py from running
+ai_prediction.run_ai_prediction()
 
 
 # --- FOOTER ---
