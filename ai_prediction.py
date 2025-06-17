@@ -31,7 +31,10 @@ def run_ai_prediction():
         if st.button("🚀 Run AI Forecast") and user_stock:
             ticker = user_stock.upper().strip() + ".NS"
             try:
+                st.write(f"📥 Fetching data for: `{ticker}`")
                 df = yf.download(ticker, period="1y", progress=False)
+                st.write("✅ Raw data:", df.tail())
+
                 if df.empty or len(df) < 90:
                     st.error("❌ Not enough data for forecasting.")
                     return
@@ -40,12 +43,16 @@ def run_ai_prediction():
                 df['RSI'] = RSIIndicator(close=df['Close'], window=14).rsi()
                 df['EMA_20'] = EMAIndicator(close=df['Close'], window=20).ema_indicator()
                 df = df.dropna()
+                st.write("📊 Data with RSI and EMA:", df.tail())
 
                 scaler = MinMaxScaler()
                 scaled_close = scaler.fit_transform(df[['Close']])
+                st.write("📉 Scaled close sample:", scaled_close[-5:])
 
                 # Prepare LSTM sequences
                 X, y = prepare_lstm_data(scaled_close)
+                st.write(f"🧠 Training data shape - X: {X.shape}, y: {y.shape}")
+
                 X = X.reshape((X.shape[0], X.shape[1], 1))
 
                 model = Sequential()
@@ -53,6 +60,7 @@ def run_ai_prediction():
                 model.add(Dense(1))
                 model.compile(optimizer='adam', loss='mse')
                 model.fit(X, y, epochs=20, verbose=0)
+                st.success("✅ Model trained!")
 
                 last_seq = scaled_close[-30:].reshape((1, 30, 1))
                 future_preds = []
@@ -62,12 +70,11 @@ def run_ai_prediction():
                     last_seq = np.append(last_seq[:, 1:, :], [[[next_pred]]], axis=1)
 
                 future_preds = scaler.inverse_transform(np.array(future_preds).reshape(-1, 1)).flatten()
+                st.write("🔮 Predicted values:", future_preds)
 
                 future_dates = pd.bdate_range(start=df.index[-1] + timedelta(days=1), periods=pred_days)
                 forecast_df = pd.DataFrame({"Date": future_dates, "Predicted Close": future_preds})
-
-                st.success("✅ Forecast generated successfully!")
-                st.dataframe(forecast_df, use_container_width=True, hide_index=True)
+                st.dataframe(forecast_df)
 
                 # Plot actual + forecast
                 fig, ax = plt.subplots(figsize=(10, 4))
@@ -78,4 +85,4 @@ def run_ai_prediction():
                 st.pyplot(fig)
 
             except Exception as e:
-                st.error(f"Error during AI prediction: {str(e)}")
+                st.error(f"❌ Error during AI prediction: {str(e)}")
