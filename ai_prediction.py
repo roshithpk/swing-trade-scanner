@@ -254,8 +254,8 @@ def run_ai_prediction():
                 # Key Metrics
                 col1, col2, col3 = st.columns(3)
                 col1.metric("Current Price", f"₹{df['Close'].iloc[-1]:.2f}")
-                col2.metric("Predicted Price", f"₹{forecast_df['Predicted Close'].iloc[0]:.2f}", 
-                           f"{((forecast_df['Predicted Close'].iloc[0]/df['Close'].iloc[-1])-1)*100:.2f}%")
+                col2.metric("Predicted Price", f"₹{float(forecast_df['Predicted Close'].iloc[0]):.2f}", 
+                           f"{((float(forecast_df['Predicted Close'].iloc[0])/df['Close'].iloc[-1])-1)*100:.2f}%")
                 col3.metric("RSI", f"{df['RSI'].iloc[-1]:.1f}")
                 
                 # Forecast Table
