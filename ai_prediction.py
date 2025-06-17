@@ -28,6 +28,7 @@ def add_technical_indicators(df):
     low_prices = df['Low'].squeeze() if isinstance(df['Low'], pd.DataFrame) else df['Low']
     
     # Momentum Indicators
+    st.write("📥 Fetching stock data...")
     df['RSI'] = RSIIndicator(close=close_prices, window=14).rsi()
     stoch = StochasticOscillator(high=high_prices, 
                                low=low_prices, 
