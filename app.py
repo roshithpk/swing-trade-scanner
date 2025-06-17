@@ -4,7 +4,9 @@ import yfinance as yf
 from ta.momentum import RSIIndicator
 from ta.trend import EMAIndicator
 
-
+if "page" not in st.session_state:
+    st.session_state.page = "main"
+    
 # --- APP SETUP ---
 st.set_page_config(page_title="📊 Indian Swing Trade Scanner", layout="wide")
 st.title("📈 Indian Swing Trade Scanner (5-10 Days)")
