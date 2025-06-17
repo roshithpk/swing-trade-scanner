@@ -116,9 +116,11 @@ if st.button("🔍 Scan Selected Stocks"):
 # --- ANALYZE SPECIFIC STOCK ---
 st.markdown("---")
 st.subheader("🔎 Analyze a Specific Stock")
-user_stock = st.text_input("Enter NSE Stock Symbol (e.g., INFY)")
+with st.form("analyze_stock_form"):
+    user_stock = st.text_input("Enter NSE Stock Symbol (e.g., INFY)")
+    analyze_button = st.form_submit_button("🔍 Analyze")
 
-if user_stock:
+if analyze_button and user_stock:
     full_ticker = user_stock.upper().strip() + ".NS"
     try:
         data = yf.download(full_ticker, period="1mo", progress=False)
