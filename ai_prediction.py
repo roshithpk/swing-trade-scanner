@@ -5,8 +5,8 @@ import numpy as np
 from datetime import datetime, timedelta
 import matplotlib.pyplot as plt
 from sklearn.preprocessing import MinMaxScaler
-from keras.models import Sequential
-from keras.layers import LSTM, Dense
+from tensorflow.keras.models import Sequential
+from tensorflow.keras.layers import LSTM, Dense
 from ta.momentum import RSIIndicator
 from ta.trend import EMAIndicator
 
