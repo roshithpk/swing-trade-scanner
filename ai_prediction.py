@@ -76,6 +76,8 @@ def generate_signals(df, forecast):
     
     last_row = df.iloc[-1]
     pred = forecast.iloc[0]['Predicted Close']
+
+    st.write("📥 1")
     
     # Signal 1: Price vs Prediction
     if pred > last_row['Close'] * 1.02:  # 2% above current
@@ -87,7 +89,8 @@ def generate_signals(df, forecast):
     else:
         signals.append("HOLD")
         reasons.append("Predicted price is close to current")
-    
+
+    st.write("📥 2")
     # Signal 2: RSI
     if last_row['RSI'] < 30:
         signals.append("BUY")
@@ -96,6 +99,7 @@ def generate_signals(df, forecast):
         signals.append("SELL")
         reasons.append("RSI indicates overbought condition")
     
+    st.write("📥 3")
     # Signal 3: MACD
     if last_row['MACD'] > last_row['MACD_Signal']:
         signals.append("BUY")
@@ -103,7 +107,8 @@ def generate_signals(df, forecast):
     elif last_row['MACD'] < last_row['MACD_Signal']:
         signals.append("SELL")
         reasons.append("MACD crossover bearish signal")
-    
+
+    st.write("📥 4")
     # Signal 4: Bollinger Bands
     if last_row['Close'] < last_row['BB_Lower']:
         signals.append("BUY")
@@ -111,7 +116,8 @@ def generate_signals(df, forecast):
     elif last_row['Close'] > last_row['BB_Upper']:
         signals.append("SELL")
         reasons.append("Price above upper Bollinger Band (potential pullback)")
-    
+
+    st.write("📥 5")
     # Count signals
     buy_count = signals.count("BUY")
     sell_count = signals.count("SELL")
