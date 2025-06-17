@@ -225,27 +225,27 @@ def run_ai_prediction():
                 # 9. Display Results
                 st.success("🎯 Forecast Complete!")
                 
-                # Price Chart
-                fig = go.Figure()
-                fig.add_trace(go.Candlestick(
-                    x=df.index,
-                    open=df['Open'],
-                    high=df['High'],
-                    low=df['Low'],
-                    close=df['Close'],
-                    name="Price"
-                ))
-                fig.add_trace(go.Scatter(
-                    x=forecast_df['Date'],
-                    y=forecast_df['Predicted Close'],
-                    line=dict(color='green', dash='dot'),
-                    name="Forecast"
-                ))
-                fig.update_layout(
-                    title=f"{user_stock} Price & Forecast",
-                    xaxis_rangeslider_visible=False
-                )
-                st.plotly_chart(fig, use_container_width=True)
+                # # Price Chart
+                # fig = go.Figure()
+                # fig.add_trace(go.Candlestick(
+                #     x=df.index,
+                #     open=df['Open'],
+                #     high=df['High'],
+                #     low=df['Low'],
+                #     close=df['Close'],
+                #     name="Price"
+                # ))
+                # fig.add_trace(go.Scatter(
+                #     x=forecast_df['Date'],
+                #     y=forecast_df['Predicted Close'],
+                #     line=dict(color='green', dash='dot'),
+                #     name="Forecast"
+                # ))
+                # fig.update_layout(
+                #     title=f"{user_stock} Price & Forecast",
+                #     xaxis_rangeslider_visible=False
+                # )
+                # st.plotly_chart(fig, use_container_width=True)
                 
                 # Trading Signal
                 if signal == "BUY":
