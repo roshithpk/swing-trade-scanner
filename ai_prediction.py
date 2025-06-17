@@ -41,6 +41,19 @@ def add_technical_indicators(df):
         low = pd.Series(df['Low'].values.flatten(), index=df.index)
         volume = pd.Series(df['Volume'].values.flatten(), index=df.index)
 
+
+        def sma_rsi(series, window=14):
+            delta = series.diff()
+        
+            gain = delta.where(delta > 0, 0)
+            loss = -delta.where(delta < 0, 0)
+        
+            avg_gain = gain.rolling(window=window).mean()
+            avg_loss = loss.rolling(window=window).mean()
+        
+            rs = avg_gain / avg_loss
+            rsi = 100 - (100 / (1 + rs))
+            return rsi
         # Calculate each indicator with individual error handling
         indicators = {
             'RSI': lambda: RSIIndicator(close=close, window=14).rsi(),
