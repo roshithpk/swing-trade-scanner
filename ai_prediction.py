@@ -6,134 +6,247 @@ from datetime import timedelta
 import plotly.graph_objects as go
 from sklearn.preprocessing import MinMaxScaler
 from tensorflow.keras.models import Sequential
-from tensorflow.keras.layers import LSTM, Dense
-from ta.momentum import RSIIndicator
-from ta.trend import EMAIndicator
+from tensorflow.keras.layers import LSTM, Dense, Dropout
+from ta.momentum import RSIIndicator, StochasticOscillator
+from ta.trend import EMAIndicator, MACD, ADXIndicator
+from ta.volatility import BollingerBands
+from ta.volume import VolumeWeightedAveragePrice
 
 # --- LSTM HELPER FUNCTION ---
-def prepare_lstm_data(series, n_steps=30):
+def prepare_lstm_data(data, n_steps=30):
     X, y = [], []
-    for i in range(n_steps, len(series)):
-        X.append(series[i - n_steps:i])
-        y.append(series[i])
+    for i in range(n_steps, len(data)):
+        X.append(data[i - n_steps:i])
+        y.append(data[i, 0])  # Predicting close price only
     return np.array(X), np.array(y)
+
+# --- TECHNICAL INDICATORS ---
+def add_technical_indicators(df):
+    # Momentum Indicators
+    df['RSI'] = RSIIndicator(close=df['Close'], window=14).rsi()
+    stoch = StochasticOscillator(high=df['High'], low=df['Low'], close=df['Close'], window=14)
+    df['Stoch_%K'] = stoch.stoch()
+    df['Stoch_%D'] = stoch.stoch_signal()
+    
+    # Trend Indicators
+    df['EMA_20'] = EMAIndicator(close=df['Close'], window=20).ema_indicator()
+    df['EMA_50'] = EMAIndicator(close=df['Close'], window=50).ema_indicator()
+    macd = MACD(close=df['Close'])
+    df['MACD'] = macd.macd()
+    df['MACD_Signal'] = macd.macd_signal()
+    df['ADX'] = ADXIndicator(high=df['High'], low=df['Low'], close=df['Close'], window=14).adx()
+    
+    # Volatility Indicators
+    bb = BollingerBands(close=df['Close'], window=20, window_dev=2)
+    df['BB_Upper'] = bb.bollinger_hband()
+    df['BB_Lower'] = bb.bollinger_lband()
+    
+    # Volume Indicators
+    df['VWAP'] = VolumeWeightedAveragePrice(high=df['High'], low=df['Low'], 
+                                          close=df['Close'], volume=df['Volume'], window=14).volume_weighted_average_price()
+    
+    return df.dropna()
+
+# --- TRADING SIGNAL GENERATION ---
+def generate_signals(df, forecast):
+    signals = []
+    reasons = []
+    
+    last_row = df.iloc[-1]
+    pred = forecast.iloc[0]['Predicted Close']
+    
+    # Signal 1: Price vs Prediction
+    if pred > last_row['Close'] * 1.02:  # 2% above current
+        signals.append("BUY")
+        reasons.append("Predicted price is significantly higher than current")
+    elif pred < last_row['Close'] * 0.98:  # 2% below current
+        signals.append("SELL")
+        reasons.append("Predicted price is significantly lower than current")
+    else:
+        signals.append("HOLD")
+        reasons.append("Predicted price is close to current")
+    
+    # Signal 2: RSI
+    if last_row['RSI'] < 30:
+        signals.append("BUY")
+        reasons.append("RSI indicates oversold condition")
+    elif last_row['RSI'] > 70:
+        signals.append("SELL")
+        reasons.append("RSI indicates overbought condition")
+    
+    # Signal 3: MACD
+    if last_row['MACD'] > last_row['MACD_Signal']:
+        signals.append("BUY")
+        reasons.append("MACD crossover bullish signal")
+    elif last_row['MACD'] < last_row['MACD_Signal']:
+        signals.append("SELL")
+        reasons.append("MACD crossover bearish signal")
+    
+    # Signal 4: Bollinger Bands
+    if last_row['Close'] < last_row['BB_Lower']:
+        signals.append("BUY")
+        reasons.append("Price below lower Bollinger Band (potential rebound)")
+    elif last_row['Close'] > last_row['BB_Upper']:
+        signals.append("SELL")
+        reasons.append("Price above upper Bollinger Band (potential pullback)")
+    
+    # Count signals
+    buy_count = signals.count("BUY")
+    sell_count = signals.count("SELL")
+    
+    if buy_count > sell_count:
+        final_signal = "BUY"
+    elif sell_count > buy_count:
+        final_signal = "SELL"
+    else:
+        final_signal = "HOLD"
+    
+    return final_signal, reasons
 
 # --- MAIN FUNCTION ---
 def run_ai_prediction():
     st.markdown("---")
-    st.header("🤖 AI Based Price Forecast")
-    st.caption("Uses LSTM model with technical indicators to forecast closing price")
+    st.header("🤖 Advanced AI Stock Prediction")
+    st.caption("Enhanced LSTM model with trading signals and explanations")
 
-    with st.expander("🔮 AI Prediction Panel", expanded=False):
-        user_stock = st.text_input("Enter NSE Stock Symbol for Prediction (e.g., INFY)")
-        pred_days = st.slider("Prediction Horizon (days)", min_value=5, max_value=15, value=10)
-
-        if st.button("🚀 Run AI Forecast") and user_stock:
+    with st.expander("🔮 AI Prediction Panel", expanded=True):
+        user_stock = st.text_input("Enter NSE Stock Symbol (e.g., INFY)", value="INFY")
+        pred_days = st.slider("Prediction Horizon (days)", 5, 15, 7)
+        
+        if st.button("🚀 Generate Advanced Forecast"):
             ticker = user_stock.upper().strip() + ".NS"
-
+            
             try:
-                st.write("📥 Fetching stock data...")
-                df = yf.download(ticker, period="1y", progress=False)
-                st.write("✅ Raw data fetched")
-                st.dataframe(df.tail())
-
-                if df.empty or len(df) < 90:
-                    st.error("❌ Not enough data for forecasting.")
-                    return
-
-                df = df.dropna()
-                st.write("🧪 Adding Technical Indicators...")
-                df['RSI'] = RSIIndicator(close=df['Close'].squeeze(), window=14).rsi().fillna(method='bfill')
-                df['EMA_20'] = EMAIndicator(close=df['Close'].squeeze(), window=20).ema_indicator().fillna(method='bfill')
-                st.write("🧪 Adding and checking...")
-                df = df.dropna()
-
-                st.write(f"✅ Data after indicators: {df.shape}")
-                st.dataframe(df.tail())
-
-                # Normalize close price
-                st.write("📊 Scaling close prices...")
-                scaler = MinMaxScaler()
-                scaled_close = scaler.fit_transform(df[['Close']])
-
-                # LSTM training data
-                st.write("🔄 Preparing LSTM sequences...")
-                X, y = prepare_lstm_data(scaled_close)
-                X = X.reshape((X.shape[0], X.shape[1], 1))
-
-                # Build LSTM model
-                st.write("⚙️ Training LSTM model...")
-                model = Sequential()
-                model.add(LSTM(50, activation='relu', input_shape=(X.shape[1], 1)))
-                model.add(Dense(1))
-                model.compile(optimizer='adam', loss='mse')
-                model.fit(X, y, epochs=20, verbose=0)
-                st.write("✅ Model training complete!")
-
-                # Predict next days
-                st.write("🔮 Predicting future prices...")
-                last_seq = scaled_close[-30:].reshape((1, 30, 1))
-                future_preds = []
-
-                for _ in range(pred_days):
-                    next_pred = model.predict(last_seq)[0, 0]
-                    future_preds.append(next_pred)
-                    last_seq = np.append(last_seq[:, 1:, :], [[[next_pred]]], axis=1)
-
-                future_preds = scaler.inverse_transform(np.array(future_preds).reshape(-1, 1)).flatten()
-                future_dates = pd.bdate_range(start=df.index[-1] + timedelta(days=1), periods=pred_days)
-                forecast_df = pd.DataFrame({"Date": future_dates, "Predicted Close": future_preds})
-
-                st.success("✅ Forecast generated successfully!")
-                st.dataframe(forecast_df, use_container_width=True, hide_index=True)
-
-                # Create candlestick chart with forecast
-                st.write("📊 Candlestick Chart with Forecast")
+                # Data Collection
+                with st.spinner("📥 Fetching enhanced stock data..."):
+                    df = yf.download(ticker, period="6mo", interval="1d", progress=False)
+                    if df.empty:
+                        st.error("❌ No data found for this stock")
+                        return
+                    
+                    df = add_technical_indicators(df)
                 
-                # Create figure
-                fig = go.Figure()
+                # Data Preparation
+                with st.spinner("🧠 Preparing AI model..."):
+                    features = ['Close', 'RSI', 'EMA_20', 'EMA_50', 'MACD', 'MACD_Signal', 'ADX', 'BB_Upper', 'BB_Lower']
+                    scaler = MinMaxScaler()
+                    scaled_data = scaler.fit_transform(df[features])
+                    
+                    # Create sequences
+                    X, y = prepare_lstm_data(scaled_data)
+                    
+                    # Enhanced LSTM Model
+                    model = Sequential([
+                        LSTM(128, return_sequences=True, input_shape=(X.shape[1], X.shape[2])),
+                        Dropout(0.2),
+                        LSTM(64, return_sequences=False),
+                        Dropout(0.2),
+                        Dense(25),
+                        Dense(1)
+                    ])
+                    
+                    model.compile(optimizer='adam', loss='mse')
+                    model.fit(X, y, epochs=50, batch_size=32, verbose=0)
                 
-                # Add candlestick
-                fig.add_trace(go.Candlestick(
-                    x=df.index,
-                    open=df['Open'],
-                    high=df['High'],
-                    low=df['Low'],
-                    close=df['Close'],
-                    name='Price History'
-                ))
+                # Prediction
+                with st.spinner("🔮 Generating forecast..."):
+                    last_seq = scaled_data[-30:]
+                    future_preds = []
+                    
+                    for _ in range(pred_days):
+                        next_pred = model.predict(last_seq.reshape(1, 30, len(features)))[0, 0]
+                        future_preds.append(next_pred)
+                        last_seq = np.append(last_seq[1:], [[next_pred] + [0]*(len(features)-1)], axis=0)
+                    
+                    # Inverse transform just the close price predictions
+                    dummy = np.zeros((len(future_preds), len(features)))
+                    dummy[:, 0] = future_preds
+                    future_preds = scaler.inverse_transform(dummy)[:, 0]
+                    
+                    future_dates = pd.bdate_range(start=df.index[-1] + timedelta(days=1), periods=pred_days)
+                    forecast_df = pd.DataFrame({"Date": future_dates, "Predicted Close": future_preds})
                 
-                # Add EMA
-                fig.add_trace(go.Scatter(
-                    x=df.index,
-                    y=df['EMA_20'],
-                    line=dict(color='orange', width=1),
-                    name='20 EMA'
-                ))
+                # Generate Signals
+                final_signal, reasons = generate_signals(df, forecast_df)
                 
-                # Add forecast
-                fig.add_trace(go.Scatter(
-                    x=forecast_df['Date'],
-                    y=forecast_df['Predicted Close'],
-                    line=dict(color='green', width=2, dash='dot'),
-                    name='AI Forecast',
-                    mode='lines+markers'
-                ))
+                # Display Results
+                st.success("✅ Advanced Forecast Complete!")
                 
-                # Update layout
-                fig.update_layout(
-                    title=f"{user_stock.upper()} Candlestick Chart with {pred_days}-Day AI Forecast",
-                    xaxis_title='Date',
-                    yaxis_title='Price',
-                    xaxis_rangeslider_visible=False,
-                    hovermode='x unified'
-                )
+                # Create tabs
+                tab1, tab2, tab3 = st.tabs(["📈 Forecast", "📊 Technicals", "📢 Trading Signal"])
                 
-                st.plotly_chart(fig, use_container_width=True)
-
+                with tab1:
+                    # Candlestick Chart with Forecast
+                    fig = go.Figure()
+                    
+                    # Candlestick
+                    fig.add_trace(go.Candlestick(
+                        x=df.index,
+                        open=df['Open'],
+                        high=df['High'],
+                        low=df['Low'],
+                        close=df['Close'],
+                        name='Price'
+                    ))
+                    
+                    # Forecast
+                    fig.add_trace(go.Scatter(
+                        x=forecast_df['Date'],
+                        y=forecast_df['Predicted Close'],
+                        line=dict(color='green', width=2, dash='dot'),
+                        name='AI Forecast',
+                        mode='lines+markers'
+                    ))
+                    
+                    fig.update_layout(
+                        title=f"{user_stock} Price & {pred_days}-Day Forecast",
+                        xaxis_rangeslider_visible=False
+                    )
+                    
+                    st.plotly_chart(fig, use_container_width=True)
+                    st.dataframe(forecast_df, use_container_width=True)
+                
+                with tab2:
+                    # Technical Indicators Visualization
+                    fig1 = go.Figure()
+                    fig1.add_trace(go.Scatter(x=df.index, y=df['RSI'], name='RSI'))
+                    fig1.add_hline(y=30, line_dash="dot", line_color="green")
+                    fig1.add_hline(y=70, line_dash="dot", line_color="red")
+                    fig1.update_layout(title="RSI Indicator")
+                    
+                    fig2 = go.Figure()
+                    fig2.add_trace(go.Scatter(x=df.index, y=df['MACD'], name='MACD'))
+                    fig2.add_trace(go.Scatter(x=df.index, y=df['MACD_Signal'], name='Signal'))
+                    fig2.update_layout(title="MACD Indicator")
+                    
+                    st.plotly_chart(fig1, use_container_width=True)
+                    st.plotly_chart(fig2, use_container_width=True)
+                
+                with tab3:
+                    # Trading Signal Card
+                    if final_signal == "BUY":
+                        st.success(f"🚀 SIGNAL: {final_signal}")
+                    elif final_signal == "SELL":
+                        st.error(f"⚠️ SIGNAL: {final_signal}")
+                    else:
+                        st.warning(f"🔄 SIGNAL: {final_signal}")
+                    
+                    st.subheader("Reasons:")
+                    for reason in set(reasons):  # Remove duplicates
+                        st.write(f"- {reason}")
+                    
+                    st.subheader("Key Metrics:")
+                    col1, col2, col3 = st.columns(3)
+                    col1.metric("Current Price", f"₹{df['Close'].iloc[-1]:.2f}")
+                    col2.metric("Predicted Price", f"₹{forecast_df['Predicted Close'].iloc[0]:.2f}", 
+                               f"{(forecast_df['Predicted Close'].iloc[0]/df['Close'].iloc[-1]-1)*100:.2f}%")
+                    col3.metric("RSI", f"{df['RSI'].iloc[-1]:.2f}")
+                    
+                    st.metric("MACD Signal", 
+                            "Bullish" if df['MACD'].iloc[-1] > df['MACD_Signal'].iloc[-1] else "Bearish")
+            
             except Exception as e:
-                st.error(f"❌ Error during AI prediction: {str(e)}")
+                st.error(f"❌ Error: {str(e)}")
 
-# Run the app
 if __name__ == "__main__":
     run_ai_prediction()
