@@ -103,10 +103,6 @@ st.markdown("---")
 st.subheader("🔎 Analyze a Specific Stock")
 user_stock = st.text_input("Enter NSE Stock Symbol (e.g., INFY)")
 
-
-if st.button("🔮 AI-Based Prediction"):
-    st.session_state["ai_mode"] = True
-    st.experimental_rerun()
 if user_stock:
     full_ticker = user_stock.upper().strip() + ".NS"
     try:
@@ -150,6 +146,13 @@ if user_stock:
     except Exception as e:
         st.error(f"Error fetching data for {user_stock.upper()}: {str(e)}")
         
+# --- AI BUTTON (Always visible) ---
+st.markdown("---")
+st.subheader("🤖 Try AI-Based Prediction")
+
+if st.button("🔮 AI-Based Prediction"):
+    st.session_state["ai_mode"] = True
+    st.experimental_rerun()
 
 
 
