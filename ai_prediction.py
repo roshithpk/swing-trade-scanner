@@ -22,7 +22,9 @@ def run_ai_prediction():
                 return
 
             # Keep only necessary columns
-            df = data[["Close", "Open", "High", "Low"]].dropna().reset_index()
+            df = data.copy()
+            df.reset_index(inplace=True)  # Converts index to column
+            df = df[["Date", "Open", "High", "Low", "Close"]].dropna()
 
             df["Date"] = pd.to_datetime(df["Date"])
             df = df[["Date", "Open", "High", "Low", "Close"]]
