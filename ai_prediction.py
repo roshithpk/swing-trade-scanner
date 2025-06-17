@@ -284,25 +284,30 @@ def run_ai_prediction():
                 col3.metric("RSI", f"{df['RSI'].iloc[-1]:.1f}")
                 
                 # Forecast Table
-                st.subheader("Forecast Details:")
-                # Use AgGrid for better layout control
+                # --- Clean forecast_df ---
+                forecast_df["Predicted Close"] = forecast_df["Predicted Close"].round(2)
+                forecast_df["Date"] = forecast_df["Date"].dt.strftime("%d-%m-%Y")  # remove 00:00
+                
+                # --- Configure AgGrid for compact width ---
                 gb = GridOptionsBuilder.from_dataframe(forecast_df)
-                gb.configure_default_column(resizable=True, wrapText=True, autoHeight=True)
-                gb.configure_column("Date", width=140)
-                gb.configure_column("Predicted Close", width=120, cellStyle={'textAlign': 'center'})
+                gb.configure_default_column(resizable=True, wrapText=False, autoHeight=True)
+                gb.configure_column("Date", width=120, cellStyle={'textAlign': 'center'})
+                gb.configure_column("Predicted Close", width=140, cellStyle={'textAlign': 'center'})
                 grid_options = gb.build()
                 
-                # Adjust table height dynamically based on number of rows
-                table_height = len(forecast_df) * 40 + 50
+                # --- Set reasonable height ---
+                table_height = min(len(forecast_df), 8) * 38 + 50
                 
+                # --- Display table ---
+                st.subheader("Forecast Details:")
                 AgGrid(
                     forecast_df,
                     gridOptions=grid_options,
                     height=table_height,
-                    fit_columns_on_grid_load=True,
-                    theme="balham"
+                    theme="balham",
+                    fit_columns_on_grid_load=False
                 )
-                
+                                
             except Exception as e:
                 st.error(f"Prediction failed: {str(e)}")
 
