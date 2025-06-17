@@ -22,15 +22,11 @@ def prepare_lstm_data(data, n_steps=30):
 
 # --- TECHNICAL INDICATORS ---
 def add_technical_indicators(df):
-    # Convert all inputs to 1D numpy arrays
-    def to_1d(series):
-        arr = series.values if isinstance(series, (pd.Series, pd.DataFrame)) else series
-        return arr.ravel()
-    
-    close = to_1d(df['Close'])
-    high = to_1d(df['High'])
-    low = to_1d(df['Low'])
-    volume = to_1d(df['Volume'])
+    # Ensure we're working with pandas Series
+    close = df['Close']
+    high = df['High']
+    low = df['Low']
+    volume = df['Volume']
 
     try:
         # Momentum Indicators
@@ -143,8 +139,15 @@ def run_ai_prediction():
                     st.error("Technical indicators failed")
                     return
                 
+                # Verify all required columns exist
+                required_cols = ['Close', 'RSI', 'EMA_20', 'MACD', 'BB_Upper', 'BB_Lower']
+                missing_cols = [col for col in required_cols if col not in df.columns]
+                if missing_cols:
+                    st.error(f"Missing columns: {missing_cols}")
+                    return
+                
                 # Model Training
-                features = ['Close', 'RSI', 'EMA_20', 'MACD', 'BB_Upper', 'BB_Lower']
+                features = required_cols  # Use the verified columns
                 scaler = MinMaxScaler()
                 scaled_data = scaler.fit_transform(df[features])
                 
@@ -167,7 +170,10 @@ def run_ai_prediction():
                 for _ in range(pred_days):
                     next_pred = model.predict(last_seq.reshape(1, 30, len(features)))[0,0]
                     future_preds.append(next_pred)
-                    last_seq = np.append(last_seq[1:], [[next_pred] + [0]*(len(features)-1)], axis=0)
+                    # Maintain the same shape for next prediction
+                    new_row = np.zeros(len(features))
+                    new_row[0] = next_pred  # Only update the Close prediction
+                    last_seq = np.vstack([last_seq[1:], new_row])
                 
                 # Inverse transform
                 dummy = np.zeros((len(future_preds), len(features)))
