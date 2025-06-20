@@ -1,123 +1,107 @@
-# stock_analyzer.py
-
 import yfinance as yf
 import pandas as pd
 import numpy as np
 from ta.momentum import RSIIndicator
-from ta.trend import EMAIndicator, MACD
-from ta.volatility import AverageTrueRange, BollingerBands
+from ta.trend import EMAIndicator
+from datetime import timedelta
+from sklearn.preprocessing import MinMaxScaler
+from tensorflow.keras.models import Sequential
+from tensorflow.keras.layers import LSTM, Dense, Dropout
 
 
-# --- Main analysis function ---
-def analyze_stock(ticker: str, rsi_bounds=(40, 70)):
+def sma_rsi(series, window=14):
+    delta = series.diff()
+    gain = delta.where(delta > 0, 0)
+    loss = -delta.where(delta < 0, 0)
+    avg_gain = gain.rolling(window=window).mean()
+    avg_loss = loss.rolling(window=window).mean()
+    rs = avg_gain / avg_loss
+    return 100 - (100 / (1 + rs))
+
+
+def build_lstm_model(input_shape):
+    model = Sequential([
+        LSTM(128, return_sequences=True, input_shape=input_shape),
+        Dropout(0.2),
+        LSTM(64),
+        Dropout(0.2),
+        Dense(1)
+    ])
+    model.compile(optimizer='adam', loss='mse')
+    return model
+
+
+def prepare_lstm_data(data, n_steps=30):
+    X, y = [], []
+    for i in range(n_steps, len(data)):
+        X.append(data[i - n_steps:i])
+        y.append(data[i, 0])
+    return np.array(X), np.array(y)
+
+
+def analyze_stock(ticker: str, settings: dict):
     try:
         df = yf.download(ticker, period="6mo", interval="1d", progress=False)
-        if df.empty or len(df) < 30:
-            return {"error": "Not enough data"}
+        if df.empty:
+            return {"error": "No data found"}
 
         df.dropna(inplace=True)
 
-        # Calculate technical indicators
         close = df['Close']
-        high = df['High']
-        low = df['Low']
         volume = df['Volume']
+        df['RSI'] = sma_rsi(close, window=14)
+        df['EMA_20'] = EMAIndicator(close=close, window=20).ema_indicator()
 
-        rsi = RSIIndicator(close=close).rsi()
-        ema20 = EMAIndicator(close=close, window=20).ema_indicator()
-        macd = MACD(close=close).macd()
-        macd_signal = MACD(close=close).macd_signal()
-        bb = BollingerBands(close=close)
-        atr = AverageTrueRange(high=high, low=low, close=close).average_true_range()
+        current_price = close.iloc[-1]
+        avg_volume = volume.mean()
+        latest_volume = volume.iloc[-1]
+        latest_rsi = df['RSI'].iloc[-1]
+        ema_20 = df['EMA_20'].iloc[-1]
+        trend = "🟢 Uptrend" if current_price > ema_20 else "🔴 Downtrend"
 
-        # Get latest values
-        latest = {
-            "price": close.iloc[-1],
-            "rsi": rsi.iloc[-1],
-            "ema20": ema20.iloc[-1],
-            "macd": macd.iloc[-1],
-            "macd_signal": macd_signal.iloc[-1],
-            "bb_upper": bb.bollinger_hband().iloc[-1],
-            "bb_lower": bb.bollinger_lband().iloc[-1],
-            "atr": atr.iloc[-1],
-        }
+        remarks = []
+        if latest_volume < avg_volume * settings['min_volume_x_avg']:
+            remarks.append("Low Volume")
+        if not (settings['rsi_low'] < latest_rsi < settings['rsi_high']):
+            remarks.append("RSI out of range")
+        if not (settings['min_price'] <= current_price <= settings['max_price']):
+            remarks.append("Price out of range")
 
-        # Determine trend
-        trend = "🟢 Uptrend" if latest['price'] > latest['ema20'] else "🔴 Downtrend"
+        # Forecast
+        features = ['Close', 'RSI', 'EMA_20']
+        df.dropna(inplace=True)
+        scaler = MinMaxScaler()
+        scaled_data = scaler.fit_transform(df[features])
+        X, y = prepare_lstm_data(scaled_data)
+        X = X.reshape((X.shape[0], X.shape[1], X.shape[2]))
 
-        # Generate signal logic
-        signal = "HOLD"
-        reasons = []
+        model = build_lstm_model((X.shape[1], X.shape[2]))
+        model.fit(X, y, epochs=50, batch_size=32, verbose=0)
 
-        if latest['rsi'] < 30:
-            reasons.append("RSI below 30 (Oversold)")
-        elif latest['rsi'] > 70:
-            reasons.append("RSI above 70 (Overbought)")
+        last_seq = scaled_data[-30:]
+        next_pred_scaled = model.predict(last_seq.reshape(1, 30, len(features)), verbose=0)[0][0]
+        dummy_row = np.zeros(len(features))
+        dummy_row[0] = next_pred_scaled
+        inverse = scaler.inverse_transform([dummy_row])
+        predicted_price = inverse[0][0]
 
-        if latest['macd'] > latest['macd_signal']:
-            reasons.append("MACD crossover bullish")
-        else:
-            reasons.append("MACD crossover bearish")
-
-        if latest['price'] < latest['bb_lower']:
-            reasons.append("Price below Bollinger Band (Support zone)")
-        elif latest['price'] > latest['bb_upper']:
-            reasons.append("Price above Bollinger Band (Resistance zone)")
-
-        # Suggest signal
-        if latest['rsi'] < 40 and latest['macd'] > latest['macd_signal']:
-            signal = "BUY"
-        elif latest['rsi'] > 70 and latest['macd'] < latest['macd_signal']:
-            signal = "SELL"
-
-        # Confidence score
-        confidence = 0
-        if signal == "BUY":
-            if latest['price'] < latest['bb_lower']:
-                confidence += 25
-            if latest['macd'] > latest['macd_signal']:
-                confidence += 25
-            if latest['rsi'] < 40:
-                confidence += 25
-            if latest['price'] > latest['ema20']:
-                confidence += 25
-        elif signal == "SELL":
-            if latest['price'] > latest['bb_upper']:
-                confidence += 25
-            if latest['macd'] < latest['macd_signal']:
-                confidence += 25
-            if latest['rsi'] > 70:
-                confidence += 25
-            if latest['price'] < latest['ema20']:
-                confidence += 25
-
-        # Risk analysis
-        risk_pct = (latest['atr'] / latest['price']) * 100
-        if risk_pct < 2:
-            risk_level = "🟢 Low"
-        elif risk_pct < 4:
-            risk_level = "🟡 Medium"
-        else:
-            risk_level = "🔴 High"
-
-        stop_loss = round(latest['price'] - latest['atr'], 2)
-        entry = round(latest['price'], 2)
-        exit_price = round(latest['price'] * 1.04, 2) if signal == "BUY" else round(latest['price'] * 0.96, 2)
+        signal = "BUY" if predicted_price > current_price * 1.02 else "SELL" if predicted_price < current_price * 0.98 else "HOLD"
+        growth_pct = ((predicted_price / current_price) - 1) * 100
 
         return {
-            "ticker": ticker.replace(".NS", ""),
-            "current_price": f"₹{entry}",
-            "signal": signal,
-            "confidence": f"{confidence}%",
-            "trend": trend,
-            "rsi": f"{latest['rsi']:.1f}",
-            "stop_loss": f"₹{stop_loss}",
-            "entry": f"₹{entry}",
-            "exit": f"₹{exit_price}",
-            "risk": risk_level,
-            "reasons": reasons
+            "Stock": ticker.replace(".NS", ""),
+            "Current Price": f"₹{current_price:.2f}",
+            "Predicted Price": f"₹{predicted_price:.2f}",
+            "Expected Growth %": f"{growth_pct:.2f}%",
+            "Trend": trend,
+            "RSI": f"{latest_rsi:.1f}",
+            "Volume (x Avg)": f"{latest_volume / avg_volume:.1f}",
+            "Signal": signal,
+            "Remarks": remarks if remarks else ["Good for swing"],
+            "Suggested Entry": f"₹{current_price:.2f}" if signal == "BUY" else "-",
+            "Suggested Exit": f"₹{predicted_price:.2f}" if signal == "BUY" else "-",
+            "Days to Target (approx)": settings.get('forecast_days', 7)
         }
 
     except Exception as e:
         return {"error": str(e)}
-
