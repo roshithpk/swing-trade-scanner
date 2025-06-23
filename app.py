@@ -109,6 +109,7 @@ def scan_stock(ticker):
         trend_ok = latest_close > ema_20.iloc[-1] if trend_required else True
         rsi_ok = rsi_low < latest_rsi < rsi_high
         breakout_ok = latest_close == close_prices.rolling(5).max().iloc[-1] if breakout_required else True
+
         price_ok = min_price <= latest_close <= max_price
 
         momentum = volume_price_momentum_signal(data)
