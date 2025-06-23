@@ -49,7 +49,7 @@ filtered_tickers = filtered_df["Ticker"].dropna().unique().tolist()
 # --- SCAN FUNCTION ---
 def scan_stock(ticker):
     try:
-        data = yf.download(ticker, period="1mo", progress=False)
+        data = yf.download(ticker, period="1mo", progress=False, auto_adjust=False)
         if data.empty or len(data) < 20:
             return None
 
