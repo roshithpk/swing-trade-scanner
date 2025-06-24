@@ -57,40 +57,62 @@ def scan_stock(ticker):
 
         data = data.dropna()
         close_prices = pd.Series(data["Close"].values.flatten(), dtype=float)
+        high_prices = pd.Series(data["High"].values.flatten(), dtype=float)
+        low_prices = pd.Series(data["Low"].values.flatten(), dtype=float)
         volumes = pd.Series(data["Volume"].values.flatten(), dtype=float)
-
-        if close_prices.empty or volumes.empty:
-            return None
 
         ema_20 = EMAIndicator(close=close_prices, window=20).ema_indicator()
         rsi = RSIIndicator(close=close_prices, window=14).rsi()
+
+        # NEW indicators:
+        macd = MACD(close=close_prices)
+        macd_line = macd.macd()
+        macd_signal = macd.macd_signal()
+
+        adx = ADXIndicator(high=high_prices, low=low_prices, close=close_prices, window=14).adx()
+
+        atr = AverageTrueRange(high=high_prices, low=low_prices, close=close_prices, window=14).average_true_range()
 
         latest_close = close_prices.iloc[-1]
         latest_volume = volumes.iloc[-1]
         avg_volume_5d = volumes.rolling(window=5).mean().iloc[-1]
         latest_rsi = rsi.iloc[-1]
+        latest_macd = macd_line.iloc[-1]
+        latest_macd_signal = macd_signal.iloc[-1]
+        latest_adx = adx.iloc[-1]
+        latest_atr = atr.iloc[-1]
 
-        # 🔄 New breakout logic: is price above last 2 days?
-        breakout_ok = latest_close > close_prices.iloc[-2] and latest_close > close_prices.iloc[-3] if breakout_required else True
-
-        # 🔄 New volume logic: compare to 5-day avg
+        # Your existing filters
+        breakout_ok = latest_close > close_prices.iloc[-2] and latest_close > close_prices.iloc[-3]
         volume_ok = latest_volume > avg_volume_5d * min_volume
         trend_ok = latest_close > ema_20.iloc[-1] if trend_required else True
         rsi_ok = rsi_low < latest_rsi < rsi_high
         price_ok = min_price <= latest_close <= max_price
 
-        if all([volume_ok, trend_ok, rsi_ok, breakout_ok, price_ok]):
+        # NEW filters:
+        macd_ok = latest_macd > latest_macd_signal  # MACD crossover
+        adx_ok = latest_adx > 20                   # ADX above 20 signals a strong trend
+
+        # Optional: ATR filter to avoid low volatility stocks
+        # For example, ignore stocks with ATR less than some % of price (say 0.5%)
+        atr_ok = latest_atr > (0.005 * latest_close)
+
+        if all([volume_ok, trend_ok, rsi_ok, breakout_ok, price_ok, macd_ok, adx_ok, atr_ok]):
             return {
                 "Stock": ticker.replace(".NS", ""),
                 "Price (₹)": f"₹{latest_close:.2f}",
                 "Volume (x)": f"{latest_volume / avg_volume_5d:.1f}",
                 "RSI": f"{latest_rsi:.1f}",
                 "Trend": "🟢" if latest_close > ema_20.iloc[-1] else "🔴",
-                "Why Buy?": "🔥 2-Day Momentum + Volume Surge"
+                "MACD": f"{latest_macd:.2f} > {latest_macd_signal:.2f}",
+                "ADX": f"{latest_adx:.1f}",
+                "ATR": f"{latest_atr:.2f}",
+                "Why Buy?": "🔥 Confirmed Momentum, Trend & Volatility"
             }
     except Exception as e:
         st.error(f"Error scanning {ticker}: {str(e)}")
     return None
+
 
 
 # --- SCAN SELECTED STOCKS ---
@@ -120,18 +142,31 @@ if user_stock:
         if not data.empty and len(data) > 14:
             data = data.dropna()
             close_prices = pd.Series(data["Close"].values.flatten(), index=data.index)
+            high_prices = pd.Series(data["High"].values.flatten(), index=data.index)
+            low_prices = pd.Series(data["Low"].values.flatten(), index=data.index)
             volumes = pd.Series(data["Volume"].values.flatten(), index=data.index)
 
             ema_20 = EMAIndicator(close=close_prices, window=20).ema_indicator()
             rsi = RSIIndicator(close=close_prices, window=14).rsi()
 
+            macd = MACD(close=close_prices)
+            macd_line = macd.macd()
+            macd_signal = macd.macd_signal()
+
+            adx = ADXIndicator(high=high_prices, low=low_prices, close=close_prices, window=14).adx()
+
+            atr = AverageTrueRange(high=high_prices, low=low_prices, close=close_prices, window=14).average_true_range()
+
             latest_close = close_prices.iloc[-1]
             latest_volume = volumes.iloc[-1]
             avg_volume_5d = volumes.rolling(window=5).mean().iloc[-1]
             latest_rsi = rsi.iloc[-1]
+            latest_macd = macd_line.iloc[-1]
+            latest_macd_signal = macd_signal.iloc[-1]
+            latest_adx = adx.iloc[-1]
+            latest_atr = atr.iloc[-1]
             trend = "🟢" if latest_close > ema_20.iloc[-1] else "🔴"
 
-            # --- Updated condition logic ---
             remarks = []
             if latest_close <= close_prices.iloc[-2] or latest_close <= close_prices.iloc[-3]:
                 remarks.append("Price not above last 2 days")
@@ -141,6 +176,12 @@ if user_stock:
                 remarks.append("RSI not in range")
             if latest_close < min_price or latest_close > max_price:
                 remarks.append("Price not in range")
+            if latest_macd <= latest_macd_signal:
+                remarks.append("MACD no bullish crossover")
+            if latest_adx <= 20:
+                remarks.append("Weak trend (ADX ≤ 20)")
+            if latest_atr <= (0.005 * latest_close):
+                remarks.append("Low volatility (ATR)")
 
             st.markdown("#### 🔬 Result:")
             result = {
@@ -149,6 +190,9 @@ if user_stock:
                 "Volume (x)": f"{latest_volume / avg_volume_5d:.1f}",
                 "RSI": f"{latest_rsi:.1f}",
                 "Trend": trend,
+                "MACD": f"{latest_macd:.2f} > {latest_macd_signal:.2f}",
+                "ADX": f"{latest_adx:.1f}",
+                "ATR": f"{latest_atr:.2f}",
                 "Remarks?": "✅ Good for Swing Trade" if not remarks else "❌ " + ", ".join(remarks)
             }
             st.dataframe(pd.DataFrame([result]), hide_index=True)
@@ -156,6 +200,7 @@ if user_stock:
             st.error("❌ Not enough data for analysis.")
     except Exception as e:
         st.error(f"Error fetching data for {user_stock.upper()}: {str(e)}")
+
 
 # --- AI BUTTON ---
 # Call AI section
