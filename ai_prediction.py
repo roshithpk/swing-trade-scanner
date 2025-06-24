@@ -96,7 +96,7 @@ def add_technical_indicators(df):
 
 # --- TRADING SIGNALS ---
 # --- TRADING SIGNALS ---
-def generate_signals(df, forecast, min_volume=2.0):
+def generate_signals(df, forecast, min_volume=1.2):
     try:
         last_row = df.iloc[-1]
         current_close = float(last_row['Close'].iloc[0]) if isinstance(last_row['Close'], pd.Series) else float(last_row['Close'])
