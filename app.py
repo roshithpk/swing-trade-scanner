@@ -23,7 +23,7 @@ stock_df = load_stocks()
 # --- SIDEBAR FILTERS ---
 st.sidebar.header("🔧 Filters")
 
-min_volume = st.sidebar.slider("Min Volume (x Avg)", 1.0, 5.0, 2.0)
+min_volume = st.sidebar.slider("Min Volume (x 5-Day Avg)", 1.0, 5.0, 2.0)
 rsi_low = st.sidebar.slider("Min RSI", 10, 50, 40)
 rsi_high = st.sidebar.slider("Max RSI", 50, 90, 70)
 min_price = st.sidebar.slider("Min Price (₹)", 10, 1000, 100)
