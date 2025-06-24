@@ -52,7 +52,7 @@ filtered_tickers = filtered_df["Ticker"].dropna().unique().tolist()
 def scan_stock(ticker):
     try:
         data = yf.download(ticker, period="1mo", progress=False, auto_adjust=False)
-        if data.empty or len(data) < 20:
+        if data.empty or len(data) < 26:
             return None
 
         data = data.dropna()
@@ -139,7 +139,7 @@ if user_stock:
     full_ticker = user_stock.upper().strip() + ".NS"
     try:
         data = yf.download(full_ticker, period="1mo", progress=False)
-        if not data.empty and len(data) > 14:
+        if not data.empty and len(data) >= 26:
             data = data.dropna()
             close_prices = pd.Series(data["Close"].values.flatten(), index=data.index)
             high_prices = pd.Series(data["High"].values.flatten(), index=data.index)
