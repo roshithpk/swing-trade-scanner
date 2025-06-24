@@ -65,31 +65,31 @@ def scan_stock(ticker):
 
         latest_close = close_prices.iloc[-1]
         latest_volume = volumes.iloc[-1]
-        avg_volume = volumes.mean()
+        avg_volume_5d = volumes.rolling(window=5).mean().iloc[-1]
         latest_rsi = rsi.iloc[-1]
 
-        volume_ok = latest_volume > avg_volume * min_volume
-        trend_ok = latest_close > ema_20.iloc[-1] if trend_required else True
-        rsi_ok = rsi_low < latest_rsi < rsi_high
-        #breakout_ok = latest_close == close_prices.rolling(5).max().iloc[-1] if breakout_required else True
-
+        # 🔄 New breakout logic: is price above last 2 days?
         breakout_ok = latest_close > close_prices.iloc[-2] and latest_close > close_prices.iloc[-3] if breakout_required else True
 
-        
+        # 🔄 New volume logic: compare to 5-day avg
+        volume_ok = latest_volume > avg_volume_5d * min_volume
+        trend_ok = latest_close > ema_20.iloc[-1] if trend_required else True
+        rsi_ok = rsi_low < latest_rsi < rsi_high
         price_ok = min_price <= latest_close <= max_price
 
         if all([volume_ok, trend_ok, rsi_ok, breakout_ok, price_ok]):
             return {
                 "Stock": ticker.replace(".NS", ""),
                 "Price (₹)": f"₹{latest_close:.2f}",
-                "Volume (x)": f"{latest_volume/avg_volume:.1f}",
+                "Volume (x)": f"{latest_volume / avg_volume_5d:.1f}",
                 "RSI": f"{latest_rsi:.1f}",
                 "Trend": "🟢" if latest_close > ema_20.iloc[-1] else "🔴",
-                "Why Buy?": "📈 Breakout + Volume Spike"
+                "Why Buy?": "🔥 2-Day Momentum + Volume Surge"
             }
     except Exception as e:
         st.error(f"Error scanning {ticker}: {str(e)}")
     return None
+
 
 # --- SCAN SELECTED STOCKS ---
 if st.button("🔍 Scan Selected Stocks"):
