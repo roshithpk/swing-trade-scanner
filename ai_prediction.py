@@ -141,7 +141,7 @@ def generate_signals(df, forecast, min_volume=2.0):
         confidence_votes = {"BUY": 0, "SELL": 0}
         
         if 'RSI' in df.columns:
-            rsi = float(last_row['RSI']).iloc[0])
+            rsi = float(last_row['RSI']).iloc[0]
             if rsi < 30:
                 confidence_votes["BUY"] += 1
                 reasons.append(f"RSI {rsi:.1f} (oversold)")
@@ -150,8 +150,8 @@ def generate_signals(df, forecast, min_volume=2.0):
                 reasons.append(f"RSI {rsi:.1f} (overbought)")
 
         if 'MACD' in df.columns and 'MACD_Signal' in df.columns:
-            macd = float(last_row['MACD']).iloc[0])
-            macd_signal = float(last_row['MACD_Signal']).iloc[0])
+            macd = float(last_row['MACD']).iloc[0]
+            macd_signal = float(last_row['MACD_Signal']).iloc[0]
             if macd > macd_signal:
                 confidence_votes["BUY"] += 1
                 reasons.append("MACD crossover bullish")
@@ -160,8 +160,8 @@ def generate_signals(df, forecast, min_volume=2.0):
                 reasons.append("MACD crossover bearish")
 
         if 'BB_Lower' in df.columns and 'BB_Upper' in df.columns:
-            bb_lower = float(last_row['BB_Lower']).iloc[0])
-            bb_upper = float(last_row['BB_Upper']).iloc[0])
+            bb_lower = float(last_row['BB_Lower']).iloc[0]
+            bb_upper = float(last_row['BB_Upper']).iloc[0]
             if current_close < bb_lower:
                 confidence_votes["BUY"] += 1
                 reasons.append("Price below lower Bollinger Band")
