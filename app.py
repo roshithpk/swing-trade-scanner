@@ -106,6 +106,7 @@ if st.button("🔍 Scan Selected Stocks"):
         st.warning("⚠️ No stocks matched the criteria. Adjust your filters and try again.")
 
 # --- ANALYZE SPECIFIC STOCK ---
+# --- ANALYZE SPECIFIC STOCK ---
 st.markdown("---")
 st.subheader("🔎 Analyze a Specific Stock")
 user_stock = st.text_input("Enter NSE Stock Symbol (e.g., INFY)")
@@ -124,15 +125,16 @@ if user_stock:
 
             latest_close = close_prices.iloc[-1]
             latest_volume = volumes.iloc[-1]
-            avg_volume = volumes.mean()
+            avg_volume_5d = volumes.rolling(window=5).mean().iloc[-1]
             latest_rsi = rsi.iloc[-1]
             trend = "🟢" if latest_close > ema_20.iloc[-1] else "🔴"
 
+            # --- Updated condition logic ---
             remarks = []
-            if latest_close != close_prices.rolling(5).max().iloc[-1]:
-                remarks.append("Not at 5-day breakout")
-            if latest_volume < avg_volume * min_volume:
-                remarks.append("Low volume")
+            if latest_close <= close_prices.iloc[-2] or latest_close <= close_prices.iloc[-3]:
+                remarks.append("Price not above last 2 days")
+            if latest_volume < avg_volume_5d * min_volume:
+                remarks.append("Low volume (vs 5-day avg)")
             if not (rsi_low < latest_rsi < rsi_high):
                 remarks.append("RSI not in range")
             if latest_close < min_price or latest_close > max_price:
@@ -142,7 +144,7 @@ if user_stock:
             result = {
                 "Stock": user_stock.upper(),
                 "Price (₹)": f"₹{latest_close:.2f}",
-                "Volume (x)": f"{latest_volume / avg_volume:.1f}",
+                "Volume (x)": f"{latest_volume / avg_volume_5d:.1f}",
                 "RSI": f"{latest_rsi:.1f}",
                 "Trend": trend,
                 "Remarks?": "✅ Good for Swing Trade" if not remarks else "❌ " + ", ".join(remarks)
@@ -152,7 +154,7 @@ if user_stock:
             st.error("❌ Not enough data for analysis.")
     except Exception as e:
         st.error(f"Error fetching data for {user_stock.upper()}: {str(e)}")
-        
+
 # --- AI BUTTON ---
 # Call AI section
 st.markdown("---")
