@@ -233,56 +233,48 @@ def run_ai_prediction():
                 model.compile(optimizer='adam', loss='mse')
                 model.fit(X, y, epochs=50, batch_size=32, verbose=0)
                 
-                # 5. Generate Predictions
-                last_seq = scaled_data[-30:]
+                # 5. Predict Future Day-by-Day with Technical Indicator Recalc
+                df_forecast = df.copy()
                 future_preds = []
+                
                 for _ in range(pred_days):
-                    next_pred = model.predict(last_seq.reshape(1, 30, len(features)), verbose=0)[0,0]
-                    future_preds.append(next_pred)
-                    new_row = np.zeros(len(features))
-                    new_row[0] = next_pred
-                    last_seq = np.vstack([last_seq[1:], new_row])
-                
-                # 6. Inverse Transform Predictions
-                dummy = np.zeros((len(future_preds), len(features)))
-                dummy[:,0] = future_preds
-                future_preds = scaler.inverse_transform(dummy)[:,0]
-                
-                # 7. Create Forecast DataFrame
-                future_dates = pd.bdate_range(start=df.index[-1] + timedelta(days=1), periods=pred_days)
+                    # Scale last 30 rows
+                    input_data = scaler.transform(df_forecast[features].iloc[-30:])
+                    input_data = input_data.reshape(1, 30, len(features))
+
+                    # Predict next close
+                    next_scaled = model.predict(input_data, verbose=0)[0, 0]
+
+                    # Inverse transform only the predicted close
+                    dummy_row = np.zeros((1, len(features)))
+                    dummy_row[0, 0] = next_scaled
+                    next_close = scaler.inverse_transform(dummy_row)[0, 0]
+                    future_preds.append(next_close)
+
+                    # Append new row with predicted close
+                    next_date = df_forecast.index[-1] + timedelta(days=1)
+                    new_row = pd.DataFrame([[np.nan]*len(df_forecast.columns)], columns=df_forecast.columns, index=[next_date])
+                    new_row.at[next_date, 'Close'] = next_close
+                    df_forecast = pd.concat([df_forecast, new_row])
+
+                    # Recalculate technical indicators after adding prediction
+                    df_forecast = add_technical_indicators(df_forecast)
+                    if df_forecast is None:
+                        st.error("Failed to recalculate indicators during forecast loop")
+                        return
+
+                # 6. Build Forecast DataFrame
                 forecast_df = pd.DataFrame({
-                    "Date": future_dates,
+                    "Date": df_forecast.index[-pred_days:],
                     "Predicted Close": future_preds
                 })
-                
-                # 8. Generate Signals
+
+                # 7. Generate Signals
                 signal, reasons = generate_signals(df, forecast_df)
                 
-                # 9. Display Results
+                # 8. Display Results
                 st.success("🎯 Forecast Complete!")
-                
-                # # Price Chart
-                # fig = go.Figure()
-                # fig.add_trace(go.Candlestick(
-                #     x=df.index,
-                #     open=df['Open'],
-                #     high=df['High'],
-                #     low=df['Low'],
-                #     close=df['Close'],
-                #     name="Price"
-                # ))
-                # fig.add_trace(go.Scatter(
-                #     x=forecast_df['Date'],
-                #     y=forecast_df['Predicted Close'],
-                #     line=dict(color='green', dash='dot'),
-                #     name="Forecast"
-                # ))
-                # fig.update_layout(
-                #     title=f"{user_stock} Price & Forecast",
-                #     xaxis_rangeslider_visible=False
-                # )
-                # st.plotly_chart(fig, use_container_width=True)
-                
+
                 # Trading Signal
                 if signal == "BUY":
                     st.success(f"✅ SIGNAL: {signal}")
@@ -305,34 +297,21 @@ def run_ai_prediction():
                 col2.metric("Predicted Price", f"₹{predicted_price:.2f}", f"{price_diff_pct:.2f}%")
                 col3.metric("RSI", f"{df['RSI'].iloc[-1]:.1f}")
                 
-                # Forecast Table
-                # --- Clean forecast_df ---
-                # Clean and format table data for display
-                forecast_df["Date"] = pd.to_datetime(forecast_df["Date"]).dt.strftime("%d-%m-%Y")  # Remove 00:00
+                # Forecast Table Display
+                forecast_df["Date"] = pd.to_datetime(forecast_df["Date"]).dt.strftime("%d-%m-%Y")
                 forecast_df["Predicted Close"] = forecast_df["Predicted Close"].round(2)
-                
-                # --- Configure AgGrid for compact width ---
+
                 gb = GridOptionsBuilder.from_dataframe(forecast_df)
                 gb.configure_default_column(resizable=True, wrapText=False, autoHeight=True)
                 gb.configure_column("Date", width=100, cellStyle={"textAlign": "center"})
                 gb.configure_column("Predicted Close", width=120, type=["numericColumn"], cellStyle={"textAlign": "center"})
                 grid_options = gb.build()
-                
-                # --- Set table height based on rows ---
+
                 table_height = min(len(forecast_df), 8) * 38 + 50
-                
-                # --- Render AgGrid ---
+
                 st.subheader("Forecast Details:")
-                
-                # Start a container div to control width
-                st.markdown(
-                    """
-                    <div style="max-width: 300px; margin: auto;">
-                    """,
-                    unsafe_allow_html=True
-                )
-                
-                # Render AgGrid inside this div
+                st.markdown("<div style='max-width: 300px; margin: auto;'>", unsafe_allow_html=True)
+
                 AgGrid(
                     forecast_df,
                     gridOptions=grid_options,
@@ -349,9 +328,8 @@ def run_ai_prediction():
                 }
                 </style>
                 """, unsafe_allow_html=True)
-                # Close the div
-                st.markdown("</div>", unsafe_allow_html=True)
 
+                st.markdown("</div>", unsafe_allow_html=True)
                                 
             except Exception as e:
                 st.error(f"Prediction failed: {str(e)}")
