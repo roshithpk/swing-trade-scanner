@@ -203,7 +203,7 @@ def run_ai_prediction():
         with st.spinner("Processing..."):
             try:
                 # 1. Data Collection
-                df = yf.download(ticker, period="6mo", interval="1d", progress=False)
+                df = yf.download(ticker, period="2y", interval="1d", progress=False)
                 if df.empty:
                     st.error("No data found for this stock")
                     return
