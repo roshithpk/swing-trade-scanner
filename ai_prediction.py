@@ -96,14 +96,14 @@ def add_technical_indicators(df):
 
 # --- TRADING SIGNALS ---
 # --- TRADING SIGNALS ---
-def generate_signals(df, forecast):
+def generate_signals(df, forecast, min_volume=2.0):
     try:
         last_row = df.iloc[-1]
         current_close = float(last_row['Close'])
         pred_close = float(forecast['Predicted Close'].iloc[0])
         reasons = []
 
-        # --- 1. Core AI Prediction Logic (Double Weight) ---
+        # --- 1. Core AI Forecast ---
         price_diff = (pred_close - current_close) / current_close
         if price_diff > 0.02:
             base_signal = "BUY"
@@ -115,10 +115,31 @@ def generate_signals(df, forecast):
             base_signal = "HOLD"
             reasons.append("AI forecast suggests minor movement")
 
-        # --- 2. Supporting Technical Indicators ---
-        confidence_votes = {"BUY": 0, "SELL": 0}
+        # --- 2. Custom Breakout Logic (New) ---
+        if len(df) >= 3:
+            prev_close_1 = float(df['Close'].iloc[-2])
+            prev_close_2 = float(df['Close'].iloc[-3])
+            if current_close > prev_close_1 and current_close > prev_close_2:
+                reasons.append("Price > last 2 days’ closes (momentum)")
+            else:
+                reasons.append("Price not above last 2 days")
+                if base_signal == "BUY":
+                    base_signal = "HOLD"
 
-        # RSI
+        # --- 3. Custom Volume Logic (New) ---
+        if len(df) >= 5:
+            last_volume = float(df['Volume'].iloc[-1])
+            volume_avg_5 = df['Volume'].rolling(window=5).mean().iloc[-1]
+            if last_volume > volume_avg_5 * min_volume:
+                reasons.append("Volume > 5-day avg × multiplier")
+            else:
+                reasons.append("Volume not strong (vs 5-day avg)")
+                if base_signal == "BUY":
+                    base_signal = "HOLD"
+
+        # --- 4. RSI, MACD, BB (same as before) ---
+        confidence_votes = {"BUY": 0, "SELL": 0}
+        
         if 'RSI' in df.columns:
             rsi = float(last_row['RSI'])
             if rsi < 30:
@@ -128,7 +149,6 @@ def generate_signals(df, forecast):
                 confidence_votes["SELL"] += 1
                 reasons.append(f"RSI {rsi:.1f} (overbought)")
 
-        # MACD
         if 'MACD' in df.columns and 'MACD_Signal' in df.columns:
             macd = float(last_row['MACD'])
             macd_signal = float(last_row['MACD_Signal'])
@@ -139,7 +159,6 @@ def generate_signals(df, forecast):
                 confidence_votes["SELL"] += 1
                 reasons.append("MACD crossover bearish")
 
-        # Bollinger Bands
         if 'BB_Lower' in df.columns and 'BB_Upper' in df.columns:
             bb_lower = float(last_row['BB_Lower'])
             bb_upper = float(last_row['BB_Upper'])
@@ -150,7 +169,7 @@ def generate_signals(df, forecast):
                 confidence_votes["SELL"] += 1
                 reasons.append("Price above upper Bollinger Band")
 
-        # --- Final Signal Logic ---
+        # --- 5. Final Signal Decision ---
         if base_signal == "BUY" and confidence_votes["SELL"] >= 2:
             final_signal = "HOLD"
             reasons.append("Conflicting indicators reduced BUY to HOLD")
@@ -165,6 +184,7 @@ def generate_signals(df, forecast):
     except Exception as e:
         st.error(f"Signal generation failed: {str(e)}")
         return "ERROR", ["Could not generate signals"]
+
 
 # --- MAIN APP ---
 def run_ai_prediction():
