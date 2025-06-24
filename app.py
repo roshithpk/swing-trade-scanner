@@ -4,6 +4,8 @@ import yfinance as yf
 from ta.momentum import RSIIndicator
 from ta.trend import EMAIndicator
 import ai_prediction
+from ta.trend import MACD, ADXIndicator
+from ta.volatility import AverageTrueRange
 
 if "page" not in st.session_state:
     st.session_state.page = "main"
