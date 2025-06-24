@@ -99,7 +99,7 @@ def add_technical_indicators(df):
 def generate_signals(df, forecast, min_volume=2.0):
     try:
         last_row = df.iloc[-1]
-        current_close = last_row['Close'].item() if hasattr(last_row['Close'], "item") else float(last_row['Close'])
+        current_close = float(last_row['Close'].iloc[0]) if isinstance(last_row['Close'], pd.Series) else float(last_row['Close'])
         pred_close = float(forecast['Predicted Close'].iloc[0])
         reasons = []
 
@@ -117,8 +117,8 @@ def generate_signals(df, forecast, min_volume=2.0):
 
         # --- 2. Custom Breakout Logic (New) ---
         if len(df) >= 3:
-            prev_close_1 = df['Close'].iloc[-2]
-            prev_close_2 = df['Close'].iloc[-3]
+            prev_close_1 = float(df['Close'].iloc[-2])
+            prev_close_2 = float(df['Close'].iloc[-3])
             if current_close > prev_close_1 and current_close > prev_close_2:
                 reasons.append("Price > last 2 days’ closes (momentum)")
             else:
@@ -128,8 +128,8 @@ def generate_signals(df, forecast, min_volume=2.0):
 
         # --- 3. Custom Volume Logic (New) ---
         if len(df) >= 5:
-            last_volume = df['Volume'].iloc[-1]
-            volume_avg_5 = df['Volume'].rolling(window=5).mean().iloc[-1]
+            last_volume = float(df['Volume'].iloc[-1])
+            volume_avg_5 = float(df['Volume'].rolling(window=5).mean().iloc[-1])
             if last_volume > volume_avg_5 * min_volume:
                 reasons.append("Volume > 5-day avg × multiplier")
             else:
@@ -141,7 +141,7 @@ def generate_signals(df, forecast, min_volume=2.0):
         confidence_votes = {"BUY": 0, "SELL": 0}
         
         if 'RSI' in df.columns:
-            rsi = last_row['RSI'].item() if hasattr(last_row['RSI'], "item") else float(last_row['RSI'])
+            rsi = float(last_row['RSI'].iloc[0]) if isinstance(last_row['RSI'], pd.Series) else float(last_row['RSI'])
             if rsi < 30:
                 confidence_votes["BUY"] += 1
                 reasons.append(f"RSI {rsi:.1f} (oversold)")
@@ -150,8 +150,8 @@ def generate_signals(df, forecast, min_volume=2.0):
                 reasons.append(f"RSI {rsi:.1f} (overbought)")
 
         if 'MACD' in df.columns and 'MACD_Signal' in df.columns:
-            macd = last_row['MACD'].item() if hasattr(last_row['MACD'], "item") else float(last_row['MACD'])
-            macd_signal = last_row['MACD_Signal'].item() if hasattr(last_row['MACD_Signal'], "item") else float(last_row['MACD_Signal'])
+            macd = float(last_row['MACD'].iloc[0]) if isinstance(last_row['MACD'], pd.Series) else float(last_row['MACD'])
+            macd_signal = float(last_row['MACD_Signal'].iloc[0]) if isinstance(last_row['MACD_Signal'], pd.Series) else float(last_row['MACD_Signal'])
             if macd > macd_signal:
                 confidence_votes["BUY"] += 1
                 reasons.append("MACD crossover bullish")
@@ -160,8 +160,8 @@ def generate_signals(df, forecast, min_volume=2.0):
                 reasons.append("MACD crossover bearish")
 
         if 'BB_Lower' in df.columns and 'BB_Upper' in df.columns:
-            bb_lower = last_row['BB_Lower'].item() if hasattr(last_row['BB_Lower'], "item") else float(last_row['BB_Lower'])
-            bb_upper = last_row['BB_Upper'].item() if hasattr(last_row['BB_Upper'], "item") else float(last_row['BB_Upper'])
+            bb_lower = float(last_row['BB_Lower'].iloc[0]) if isinstance(last_row['BB_Lower'], pd.Series) else float(last_row['BB_Lower'])
+            bb_upper = float(last_row['BB_Upper'].iloc[0]) if isinstance(last_row['BB_Upper'], pd.Series) else float(last_row['BB_Upper'])
             if current_close < bb_lower:
                 confidence_votes["BUY"] += 1
                 reasons.append("Price below lower Bollinger Band")
@@ -184,6 +184,7 @@ def generate_signals(df, forecast, min_volume=2.0):
     except Exception as e:
         st.error(f"Signal generation failed: {str(e)}")
         return "ERROR", ["Could not generate signals"]
+
 
 
 
