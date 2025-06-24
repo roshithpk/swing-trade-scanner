@@ -99,7 +99,7 @@ def add_technical_indicators(df):
 def generate_signals(df, forecast, min_volume=2.0):
     try:
         last_row = df.iloc[-1]
-        current_close = last_row['Close']
+        current_close = last_row['Close'].item()
         pred_close = float(forecast['Predicted Close'].iloc[0])
         reasons = []
 
@@ -141,7 +141,7 @@ def generate_signals(df, forecast, min_volume=2.0):
         confidence_votes = {"BUY": 0, "SELL": 0}
         
         if 'RSI' in df.columns:
-            rsi = last_row['RSI']
+            rsi = last_row['RSI'].item()
             if rsi < 30:
                 confidence_votes["BUY"] += 1
                 reasons.append(f"RSI {rsi:.1f} (oversold)")
@@ -150,8 +150,8 @@ def generate_signals(df, forecast, min_volume=2.0):
                 reasons.append(f"RSI {rsi:.1f} (overbought)")
 
         if 'MACD' in df.columns and 'MACD_Signal' in df.columns:
-            macd = float(last_row['MACD'])  # forces scalar
-            macd_signal = float(last_row['MACD_Signal'])
+            macd = float(last_row['MACD']).item()  # forces scalar
+            macd_signal = float(last_row['MACD_Signal']).item()
             if macd > macd_signal:
                 confidence_votes["BUY"] += 1
                 reasons.append("MACD crossover bullish")
@@ -160,8 +160,8 @@ def generate_signals(df, forecast, min_volume=2.0):
                 reasons.append("MACD crossover bearish")
 
         if 'BB_Lower' in df.columns and 'BB_Upper' in df.columns:
-            bb_lower = last_row['BB_Lower']
-            bb_upper = last_row['BB_Upper']
+            bb_lower = last_row['BB_Lower'].item()
+            bb_upper = last_row['BB_Upper'].item()
             if current_close < bb_lower:
                 confidence_votes["BUY"] += 1
                 reasons.append("Price below lower Bollinger Band")
