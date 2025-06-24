@@ -99,7 +99,7 @@ def add_technical_indicators(df):
 def generate_signals(df, forecast, min_volume=2.0):
     try:
         last_row = df.iloc[-1]
-        current_close = float(last_row['Close']).iloc[0])
+        current_close = float(last_row['Close']).iloc[0]
         pred_close = float(forecast['Predicted Close'].iloc[0])
         reasons = []
 
