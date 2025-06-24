@@ -30,7 +30,7 @@ rsi_low = st.sidebar.slider("Min RSI", 10, 50, 30)
 rsi_high = st.sidebar.slider("Max RSI", 50, 90, 75)
 min_price = st.sidebar.slider("Min Price (₹)", 10, 1000, 100)
 max_price = st.sidebar.slider("Max Price (₹)", 1000, 10000, 3000)
-breakout_required = st.sidebar.checkbox("📈 Require Price > Last 2 Days' Close", value=True)
+breakout_required = st.sidebar.checkbox("📈 Current Price > Last 2 Days' Closes"", value=True)
 trend_required = st.sidebar.checkbox("🟢 Price Above 20 EMA", value=True)
 
 # --- MAIN FILTER FOR CATEGORY ---
