@@ -150,8 +150,8 @@ def generate_signals(df, forecast, min_volume=2.0):
                 reasons.append(f"RSI {rsi:.1f} (overbought)")
 
         if 'MACD' in df.columns and 'MACD_Signal' in df.columns:
-            macd = last_row['MACD']
-            macd_signal = last_row['MACD_Signal']
+            macd = float(last_row['MACD'])  # forces scalar
+            macd_signal = float(last_row['MACD_Signal'])
             if macd > macd_signal:
                 confidence_votes["BUY"] += 1
                 reasons.append("MACD crossover bullish")
