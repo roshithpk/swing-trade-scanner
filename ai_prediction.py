@@ -154,7 +154,7 @@ def run_ai_prediction():
             model.eval()
             preds = []
             pred_dates = []
-            current_sequence = X_tensor[-1:].clone()  # Start with last known sequence
+            current_sequence = X_tensor[-1:].clone()
             last_known = df.copy()
             current_date = last_known.index[-1]
             
@@ -167,50 +167,45 @@ def run_ai_prediction():
             
             for i, target_date in enumerate(business_days_to_predict):
                 with torch.no_grad():
-                    # Get scaled prediction (0-1 range)
+                    # 1. Get prediction
                     pred_scaled = model(current_sequence).item()
+                    pred_close = scaler.inverse_transform([[pred_scaled] + [0]*(len(features)-1)])[0][0]
                 
-                # 1. Generate realistic OHLC values for the prediction
+                # 2. Generate complete OHLC data
                 last_close = last_known['Close'].iloc[-1]
-                pred_close = scaler.inverse_transform([[pred_scaled] + [0]*(len(features)-1)])[0][0]
-                
-                # Calculate realistic High/Low based on predicted Close
-                pred_high = pred_close * 1.005  # Typically 0.5% higher than close
-                pred_low = pred_close * 0.995   # Typically 0.5% lower than close
-                pred_open = (last_close + pred_close) / 2  # Open between last close and current pred
-                
-                # 2. Create complete OHLC row
                 new_row = {
-                    'Open': pred_open,
-                    'High': pred_high,
-                    'Low': pred_low,
+                    'Open': last_close,
+                    'High': max(last_close, pred_close) * 1.005,
+                    'Low': min(last_close, pred_close) * 0.995,
                     'Close': pred_close,
-                    'Volume': last_known['Volume'].iloc[-1] * 0.95  # Slight volume decrease
+                    'Volume': last_known['Volume'].iloc[-1] * 0.95
                 }
                 
                 # 3. Add to dataframe (preserve all columns)
                 new_df = pd.DataFrame([new_row], index=[target_date])
                 for col in last_known.columns:
                     if col not in new_row:
-                        new_df[col] = last_known[col].iloc[-1]  # Carry forward other values
-                
+                        new_df[col] = last_known[col].iloc[-1]
                 last_known = pd.concat([last_known, new_df])
                 
-                # 4. Now recompute indicators with proper OHLC data
+                # 4. RECOMPUTE indicators with proper OHLC
                 last_known = add_indicators(last_known)
                 
-                # 5. Get the ACTUAL new scaled values with proper indicators
+                # 5. CRITICAL: Get properly scaled new values
                 new_scaled = scaler.transform(last_known[features].iloc[-1:])[0]
                 
-                # 6. Update sequence properly
+                # 6. PROPER sequence update
                 current_sequence_np = current_sequence.numpy()[0]
                 new_sequence_np = np.vstack([current_sequence_np[1:], new_scaled])
                 current_sequence = torch.tensor(new_sequence_np[np.newaxis], dtype=torch.float32)
                 
-                # Store prediction
+                # Debug checks
+                st.write(f"🔍 Last 3 sequence closes: {current_sequence_np[-3:,0]}")
+                st.write(f"🔍 New scaled values: {new_scaled}")
+                
                 preds.append(pred_close)
                 pred_dates.append(target_date)
-                
+                            
                 # Debug output
                 st.write(f"📅 {target_date.date()}: "
                          f"O:{pred_open:.2f} H:{pred_high:.2f} L:{pred_low:.2f} C:{pred_close:.2f}")
