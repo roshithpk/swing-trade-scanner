@@ -2,337 +2,267 @@ import streamlit as st
 import yfinance as yf
 import pandas as pd
 import numpy as np
-from datetime import timedelta
+from datetime import timedelta, datetime
 import plotly.graph_objects as go
 from sklearn.preprocessing import MinMaxScaler
-from tensorflow.keras.models import Sequential
-from tensorflow.keras.layers import LSTM, Dense, Dropout
-from ta.momentum import RSIIndicator, StochasticOscillator
-from ta.trend import EMAIndicator, MACD, ADXIndicator
-from ta.volatility import BollingerBands
-from ta.volume import VolumeWeightedAveragePrice
 from st_aggrid import AgGrid, GridOptionsBuilder
+import torch
+import torch.nn as nn
+from ta.momentum import RSIIndicator
+from ta.trend import EMAIndicator, MACD, ADXIndicator
+from ta.volatility import AverageTrueRange
+import math
 
-# --- LSTM HELPER FUNCTION ---
-def prepare_lstm_data(data, n_steps=30):
-    X, y = [], []
-    for i in range(n_steps, len(data)):
-        X.append(data[i - n_steps:i])
-        y.append(data[i, 0])  # Predicting close price only
-    return np.array(X), np.array(y)
+# --- Helper function to skip weekends ---
+def next_business_day(date):
+    """Get the next business day (skips weekends)"""
+    next_day = date + timedelta(days=1)
+    while next_day.weekday() >= 5:  # 5=Saturday, 6=Sunday
+        next_day += timedelta(days=1)
+    return next_day
 
-# --- TECHNICAL INDICATORS ---
-def add_technical_indicators(df):
-    try:
-        # Check if we have enough data (minimum 30 days)
-        if len(df) < 30:
-            st.error(f"Need at least 30 data points, only have {len(df)}")
-            return None
-        
-        # Ensure we have required price columns
-        required_cols = ['Open', 'High', 'Low', 'Close', 'Volume']
-        missing_cols = [col for col in required_cols if col not in df.columns]
-        if missing_cols:
-            st.error(f"Missing required columns: {missing_cols}")
-            return None
-        
-        # Convert to pandas Series with proper index
-        close = pd.Series(df['Close'].values.flatten(), index=df.index)
-        high = pd.Series(df['High'].values.flatten(), index=df.index)
-        low = pd.Series(df['Low'].values.flatten(), index=df.index)
-        volume = pd.Series(df['Volume'].values.flatten(), index=df.index)
+# --- Positional Encoding ---
+class PositionalEncoding(nn.Module):
+    def __init__(self, d_model, max_len=500):
+        super().__init__()
+        pe = torch.zeros(max_len, d_model)
+        position = torch.arange(0, max_len, dtype=torch.float).unsqueeze(1)
+        div_term = torch.exp(torch.arange(0, d_model, 2).float() * (-math.log(10000.0) / d_model))
+        pe[:, 0::2] = torch.sin(position * div_term)
+        pe[:, 1::2] = torch.cos(position * div_term)
+        pe = pe.unsqueeze(0)
+        self.register_buffer('pe', pe)
 
+    def forward(self, x):
+        x = x + self.pe[:, :x.size(1)]
+        return x
 
-        def sma_rsi(series, window=14):
-            delta = series.diff()
-        
-            gain = delta.where(delta > 0, 0)
-            loss = -delta.where(delta < 0, 0)
-        
-            avg_gain = gain.rolling(window=window).mean()
-            avg_loss = loss.rolling(window=window).mean()
-        
-            rs = avg_gain / avg_loss
-            rsi = 100 - (100 / (1 + rs))
-            return rsi
-        # Calculate each indicator with individual error handling
-        indicators = {
-            'RSI': lambda: RSIIndicator(close=close, window=14).rsi(),
-            'Stoch_%K': lambda: StochasticOscillator(high=high, low=low, close=close, window=14).stoch(),
-            'Stoch_%D': lambda: StochasticOscillator(high=high, low=low, close=close, window=14).stoch_signal(),
-            'EMA_20': lambda: EMAIndicator(close=close, window=20).ema_indicator(),
-            'EMA_50': lambda: EMAIndicator(close=close, window=50).ema_indicator(),
-            'MACD': lambda: MACD(close=close).macd(),
-            'MACD_Signal': lambda: MACD(close=close).macd_signal(),
-            'MACD_Hist': lambda: MACD(close=close).macd_diff(),
-            'BB_Upper': lambda: BollingerBands(close=close, window=20, window_dev=2).bollinger_hband(),
-            'BB_Middle': lambda: BollingerBands(close=close, window=20, window_dev=2).bollinger_mavg(),
-            'BB_Lower': lambda: BollingerBands(close=close, window=20, window_dev=2).bollinger_lband(),
-            'VWAP': lambda: VolumeWeightedAveragePrice(high=high, low=low, close=close, volume=volume, window=14).volume_weighted_average_price()
-        }
+# --- Transformer Model ---
+class TransformerModel(nn.Module):
+    def __init__(self, input_size, d_model=64, nhead=4, num_layers=2, dropout=0.1, max_len=500):
+        super().__init__()
+        self.input_linear = nn.Linear(input_size, d_model)
+        self.pos_encoder = PositionalEncoding(d_model, max_len=max_len)
+        encoder_layer = nn.TransformerEncoderLayer(d_model=d_model, nhead=nhead, dropout=dropout)
+        self.transformer_encoder = nn.TransformerEncoder(encoder_layer, num_layers=num_layers)
+        self.output_linear = nn.Sequential(
+            nn.Linear(d_model, 1),
+            nn.Sigmoid()  # Constrain outputs to 0-1 range
+        )
 
-        for name, calc in indicators.items():
-            try:
-                df[name] = calc()
-            except Exception as e:
-                st.warning(f"Could not calculate {name}: {str(e)}")
-                df[name] = np.nan
+    def forward(self, src):
+        src = self.input_linear(src)
+        src = self.pos_encoder(src)
+        output = self.transformer_encoder(src)
+        output = self.output_linear(output[:, -1, :])
+        return output
 
-        # Fill any remaining NA values
-        df.ffill(inplace=True)
-        df.bfill(inplace=True)
-        
-        # Verify we have the essential indicators
-        required_indicators = ['RSI', 'EMA_20', 'MACD', 'BB_Upper', 'BB_Lower']
-        if not all(ind in df.columns for ind in required_indicators):
-            st.error("Failed to calculate essential indicators")
-            return None
-            
-        return df
-    
-    except Exception as e:
-        st.error(f"Technical indicators failed: {str(e)}")
-        return None
+# --- Feature Engineering ---
+def add_indicators(df):
+    df = df.copy()
+    if len(df) >= 14:  # Minimum required for RSI
+        df['RSI'] = RSIIndicator(close=df['Close'].squeeze(), window=14).rsi()
+    if len(df) >= 20:  # Minimum required for EMA20
+        df['EMA20'] = EMAIndicator(close=df['Close'].squeeze(), window=20).ema_indicator()
+    df['MACD'] = MACD(close=df['Close'].squeeze()).macd()
+    df['ADX'] = ADXIndicator(
+        high=df['High'].squeeze(),
+        low=df['Low'].squeeze(),
+        close=df['Close'].squeeze()
+    ).adx()
+    df['ATR'] = AverageTrueRange(
+        high=df['High'].squeeze(),
+        low=df['Low'].squeeze(),
+        close=df['Close'].squeeze()
+    ).average_true_range()
+    df.dropna(inplace=True)
+    return df
 
-# --- TRADING SIGNALS ---
-# --- TRADING SIGNALS ---
-def generate_signals(df, forecast, min_volume=1.2):
-    try:
-        last_row = df.iloc[-1]
-        current_close = float(last_row['Close'].iloc[0]) if isinstance(last_row['Close'], pd.Series) else float(last_row['Close'])
-        pred_close = float(forecast['Predicted Close'].iloc[0])
-        reasons = []
+# --- Sequence Creation ---
+def create_sequences(data, seq_len):
+    xs, ys = [], []
+    for i in range(len(data) - seq_len):
+        x = data[i:i + seq_len]
+        y = data[i + seq_len, 0]  # Predict Close only
+        xs.append(x)
+        ys.append(y)
+    return np.array(xs), np.array(ys).flatten()
 
-        # --- 1. Core AI Forecast ---
-        price_diff = (pred_close - current_close) / current_close
-        if price_diff > 0.02:
-            base_signal = "BUY"
-            reasons.append(f"AI forecast suggests +{price_diff:.2%} increase")
-        elif price_diff < -0.02:
-            base_signal = "SELL"
-            reasons.append(f"AI forecast suggests {price_diff:.2%} drop")
-        else:
-            base_signal = "HOLD"
-            reasons.append("AI forecast suggests minor movement")
-
-        # --- 2. Custom Breakout Logic (New) ---
-        if len(df) >= 3:
-            prev_close_1 = float(df['Close'].iloc[-2])
-            prev_close_2 = float(df['Close'].iloc[-3])
-            if current_close > prev_close_1 and current_close > prev_close_2:
-                reasons.append("Price > last 2 days’ closes (momentum)")
-            else:
-                reasons.append("Price not above last 2 days")
-                if base_signal == "BUY":
-                    base_signal = "HOLD"
-
-        # --- 3. Custom Volume Logic (New) ---
-        if len(df) >= 5:
-            last_volume = float(df['Volume'].iloc[-1])
-            volume_avg_5 = float(df['Volume'].rolling(window=5).mean().iloc[-1])
-            if last_volume > volume_avg_5 * min_volume:
-                reasons.append("Volume > 5-day avg × multiplier")
-            else:
-                reasons.append("Volume not strong (vs 5-day avg)")
-                if base_signal == "BUY":
-                    base_signal = "HOLD"
-
-        # --- 4. RSI, MACD, BB (same as before) ---
-        confidence_votes = {"BUY": 0, "SELL": 0}
-        
-        if 'RSI' in df.columns:
-            rsi = float(last_row['RSI'].iloc[0]) if isinstance(last_row['RSI'], pd.Series) else float(last_row['RSI'])
-            if rsi < 30:
-                confidence_votes["BUY"] += 1
-                reasons.append(f"RSI {rsi:.1f} (oversold)")
-            elif rsi > 70:
-                confidence_votes["SELL"] += 1
-                reasons.append(f"RSI {rsi:.1f} (overbought)")
-
-        if 'MACD' in df.columns and 'MACD_Signal' in df.columns:
-            macd = float(last_row['MACD'].iloc[0]) if isinstance(last_row['MACD'], pd.Series) else float(last_row['MACD'])
-            macd_signal = float(last_row['MACD_Signal'].iloc[0]) if isinstance(last_row['MACD_Signal'], pd.Series) else float(last_row['MACD_Signal'])
-            if macd > macd_signal:
-                confidence_votes["BUY"] += 1
-                reasons.append("MACD crossover bullish")
-            else:
-                confidence_votes["SELL"] += 1
-                reasons.append("MACD crossover bearish")
-
-        if 'BB_Lower' in df.columns and 'BB_Upper' in df.columns:
-            bb_lower = float(last_row['BB_Lower'].iloc[0]) if isinstance(last_row['BB_Lower'], pd.Series) else float(last_row['BB_Lower'])
-            bb_upper = float(last_row['BB_Upper'].iloc[0]) if isinstance(last_row['BB_Upper'], pd.Series) else float(last_row['BB_Upper'])
-            if current_close < bb_lower:
-                confidence_votes["BUY"] += 1
-                reasons.append("Price below lower Bollinger Band")
-            elif current_close > bb_upper:
-                confidence_votes["SELL"] += 1
-                reasons.append("Price above upper Bollinger Band")
-
-        # --- 5. Final Signal Decision ---
-        if base_signal == "BUY" and confidence_votes["SELL"] >= 2:
-            final_signal = "HOLD"
-            reasons.append("Conflicting indicators reduced BUY to HOLD")
-        elif base_signal == "SELL" and confidence_votes["BUY"] >= 2:
-            final_signal = "HOLD"
-            reasons.append("Conflicting indicators reduced SELL to HOLD")
-        else:
-            final_signal = base_signal
-
-        return final_signal, list(set(reasons))
-
-    except Exception as e:
-        st.error(f"Signal generation failed: {str(e)}")
-        return "ERROR", ["Could not generate signals"]
-
-
-
-
-# --- MAIN APP ---
+# --- Main Function ---
 def run_ai_prediction():
-    st.title("📈 AI Stock Prediction Dashboard")
-    
+    st.title("📈 Transformer-based Stock Forecast with Technical Indicators")
+
     with st.expander("⚙️ Settings", expanded=True):
         col1, col2 = st.columns(2)
         user_stock = col1.text_input("Stock Symbol (e.g., INFY)", value="INFY")
         pred_days = col2.slider("Forecast Days", 5, 15, 7)
-    
-    if st.button("🚀 Generate Forecast"):
+
+    if st.button("🚀 Predict with Transformer"):
         ticker = f"{user_stock.upper().strip()}.NS"
-        
-        with st.spinner("Processing..."):
-            try:
-                # 1. Data Collection
-                df = yf.download(ticker, period="2y", interval="1d", progress=False)
-                if df.empty:
-                    st.error("No data found for this stock")
-                    return
+        try:
+            df = yf.download(ticker, period="2y", interval="1d", progress=False)
+            if df.empty:
+                st.error("No data found for this stock")
+                return
+
+            # Ensure we only have business days in historical data
+            df = df[df.index.dayofweek < 5]  # 0-4 = Monday-Friday
+
+            df = add_indicators(df)
+            features = ['Close', 'RSI', 'EMA20', 'MACD', 'ADX', 'ATR']
+            scaler = MinMaxScaler()
+            scaled = scaler.fit_transform(df[features])
+
+            seq_len = 30
+            X, y = create_sequences(scaled, seq_len)
+            X_tensor = torch.tensor(X, dtype=torch.float32)
+            y_tensor = torch.tensor(y, dtype=torch.float32)
+
+            model = TransformerModel(
+                input_size=len(features),
+                d_model=64,
+                nhead=4,
+                num_layers=2,
+                dropout=0.2
+            )
+            
+            loss_fn = nn.MSELoss()
+            optimizer = torch.optim.Adam(model.parameters(), lr=0.001)
+            
+            # --- Training with Progress Bar ---
+            model.train()
+            progress_bar = st.progress(0)
+            status_text = st.empty()
+            
+            for epoch in range(50):
+                optimizer.zero_grad()
+                output = model(X_tensor)
+                loss = loss_fn(output.view(-1), y_tensor)
+                loss.backward()
+                optimizer.step()
+            
+                percent_complete = int(((epoch + 1) / 50) * 100)
+                progress_bar.progress(percent_complete)
+                status_text.text(f"Training progress: {percent_complete}% (Epoch {epoch+1}/50)")
+            
+            status_text.text("✅ Training completed!")
+
+            # --- Prediction with Proper Sequence Updating ---
+            model.eval()
+            preds = []
+            pred_dates = []
+            current_sequence = X_tensor[-1:].clone()  # Start with last known sequence
+            last_known = df.copy()
+            current_date = last_known.index[-1]
+
+            # Get business days to predict
+            business_days_to_predict = []
+            temp_date = current_date
+            for _ in range(pred_days):
+                temp_date = next_business_day(temp_date)
+                business_days_to_predict.append(temp_date)
+
+            st.write(f"📅 Business days to predict: {[d.date() for d in business_days_to_predict]}")
+
+            for target_date in business_days_to_predict:
+                with torch.no_grad():
+                    # Get prediction
+                    pred_scaled = model(current_sequence).item()
+                    st.write(f"🔢 Raw prediction for {target_date.date()}: {pred_scaled}")
                 
-                # 2. Add Technical Indicators
-                df = add_technical_indicators(df)
-                if df is None:
-                    st.error("Failed to calculate technical indicators")
-                    return
+                # Create new row for our dataframe
+                new_row = last_known.iloc[-1].copy()
+                new_row.name = target_date
+                new_row['Close'] = scaler.inverse_transform(
+                    [[pred_scaled] + [0]*(len(features)-1)]
+                )[0][0]
                 
-                # 3. Prepare LSTM Data
-                features = ['Close', 'RSI', 'EMA_20', 'MACD', 'BB_Upper', 'BB_Lower']
-                scaler = MinMaxScaler()
-                scaled_data = scaler.fit_transform(df[features])
+                # Add to dataframe and recompute indicators
+                last_known = pd.concat([last_known, pd.DataFrame([new_row])])
+                last_known = add_indicators(last_known)
                 
-                X, y = prepare_lstm_data(scaled_data)
-                X = X.reshape((X.shape[0], X.shape[1], len(features)))
+                # Get the ACTUAL new values (now with proper indicators)
+                new_values = last_known[features].iloc[-1]
+                new_scaled = scaler.transform([new_values])[0]
                 
-                # 4. Build and Train Model
-                model = Sequential([
-                    LSTM(128, return_sequences=True, input_shape=(X.shape[1], X.shape[2])),
-                    Dropout(0.2),
-                    LSTM(64),
-                    Dropout(0.2),
-                    Dense(1)
-                ])
-                model.compile(optimizer='adam', loss='mse')
-                model.fit(X, y, epochs=50, batch_size=32, verbose=0)
+                # Update sequence (critical fix!)
+                current_sequence_np = current_sequence.numpy()[0]
+                new_sequence_np = np.vstack([current_sequence_np[1:], new_scaled])
+                current_sequence = torch.tensor(new_sequence_np[np.newaxis], dtype=torch.float32)
                 
-                # 5. Predict Future Day-by-Day with Technical Indicator Recalc
-                df_forecast = df.copy()
-                future_preds = []
+                # Store prediction
+                pred_close = new_row['Close']
+                preds.append(pred_close)
+                pred_dates.append(target_date)
                 
-                for _ in range(pred_days):
-                    # Scale last 30 rows
-                    input_data = scaler.transform(df_forecast[features].iloc[-30:])
-                    input_data = input_data.reshape(1, 30, len(features))
+                # Debug output
+                st.write(f"📅 Date: {target_date.date()} | Predicted Close: {pred_close:.2f}")
+                st.write(f"📊 New scaled values: {new_scaled}")
+                st.write(f"🔄 Sequence updated - Last 3 closes: {current_sequence_np[-3:,0]}...")
 
-                    # Predict next close
-                    next_scaled = model.predict(input_data, verbose=0)[0, 0]
+            # Create final dataframe
+            forecast_df = pd.DataFrame({
+                "Date": pred_dates,
+                "Predicted Close": preds
+            })
 
-                    # Inverse transform only the predicted close
-                    dummy_row = np.zeros((1, len(features)))
-                    dummy_row[0, 0] = next_scaled
-                    next_close = scaler.inverse_transform(dummy_row)[0, 0]
-                    future_preds.append(next_close)
+            # --- Model Signal ---
+            current_price = float(df['Close'].iloc[-1])
+            predicted_price = float(forecast_df['Predicted Close'].iloc[0])
+            pct_diff = ((predicted_price - current_price) / current_price) * 100
 
-                    # Append new row with predicted close
-                    next_date = df_forecast.index[-1] + timedelta(days=1)
-                    new_row = pd.DataFrame([[np.nan]*len(df_forecast.columns)], columns=df_forecast.columns, index=[next_date])
-                    new_row.at[next_date, 'Close'] = next_close
-                    df_forecast = pd.concat([df_forecast, new_row])
+            if pct_diff >= 2:
+                signal = "BUY"
+                reason = f"📈 Forecasted to rise by {pct_diff:.2f}%"
+            elif pct_diff <= -2:
+                signal = "SELL"
+                reason = f"📉 Forecasted to fall by {pct_diff:.2f}%"
+            else:
+                signal = "HOLD"
+                reason = f"🔄 Minimal change expected ({pct_diff:.2f}%)"
 
-                    # Recalculate technical indicators after adding prediction
-                    df_forecast = add_technical_indicators(df_forecast)
-                    if df_forecast is None:
-                        st.error("Failed to recalculate indicators during forecast loop")
-                        return
+            st.markdown("### 🧠 Model Signal")
+            if signal == "BUY":
+                st.success(f"✅ SIGNAL: **{signal}**  \n**Reason:** {reason}")
+            elif signal == "SELL":
+                st.error(f"❌ SIGNAL: **{signal}**  \n**Reason:** {reason}")
+            else:
+                st.warning(f"🔄 SIGNAL: **{signal}**  \n**Reason:** {reason}")
 
-                # 6. Build Forecast DataFrame
-                forecast_df = pd.DataFrame({
-                    "Date": df_forecast.index[-pred_days:],
-                    "Predicted Close": future_preds
-                })
+            # --- Metrics ---
+            col1, col2 = st.columns(2)
+            col1.metric("Current Price", f"₹{current_price:.2f}")
+            col2.metric("Predicted Price", f"₹{predicted_price:.2f}", f"{pct_diff:.2f}%")
 
-                # 7. Generate Signals
-                signal, reasons = generate_signals(df, forecast_df)
-                
-                # 8. Display Results
-                st.success("🎯 Forecast Complete!")
+            # --- Forecast Table ---
+            gb = GridOptionsBuilder.from_dataframe(forecast_df)
+            gb.configure_default_column(resizable=True, wrapText=True)
+            grid_options = gb.build()
+            AgGrid(forecast_df, gridOptions=grid_options, theme="balham", height=350)
 
-                # Trading Signal
-                if signal == "BUY":
-                    st.success(f"✅ SIGNAL: {signal}")
-                elif signal == "SELL":
-                    st.error(f"❌ SIGNAL: {signal}")
-                else:
-                    st.warning(f"🔄 SIGNAL: {signal}")
-                
-                st.subheader("Reasons:")
-                for reason in reasons:
-                    st.write(f"- {reason}")
-                
-                # Key Metrics
-                col1, col2, col3 = st.columns(3)
-                current_price = float(df['Close'].iloc[-1])
-                predicted_price = float(forecast_df['Predicted Close'].values[0])
-                price_diff_pct = ((predicted_price / current_price) - 1) * 100
-                
-                col1.metric("Current Price", f"₹{current_price:.2f}")
-                col2.metric("Predicted Price", f"₹{predicted_price:.2f}", f"{price_diff_pct:.2f}%")
-                col3.metric("RSI", f"{df['RSI'].iloc[-1]:.1f}")
-                
-                # Forecast Table Display
-                forecast_df["Date"] = pd.to_datetime(forecast_df["Date"]).dt.strftime("%d-%m-%Y")
-                forecast_df["Predicted Close"] = forecast_df["Predicted Close"].round(2)
+            # --- Plot Chart ---
+            fig = go.Figure()
+            fig.add_trace(go.Scatter(
+                x=df.index[-60:], 
+                y=df['Close'].iloc[-60:], 
+                mode='lines', 
+                name='Historical'
+            ))
+            fig.add_trace(go.Scatter(
+                x=forecast_df['Date'], 
+                y=forecast_df['Predicted Close'], 
+                mode='lines+markers', 
+                name='Predicted'
+            ))
+            fig.update_layout(
+                title=f"{user_stock.upper()} Forecast (Business Days Only)",
+                xaxis_title="Date",
+                yaxis_title="Close Price"
+            )
+            st.plotly_chart(fig, use_container_width=True)
 
-                gb = GridOptionsBuilder.from_dataframe(forecast_df)
-                gb.configure_default_column(resizable=True, wrapText=False, autoHeight=True)
-                gb.configure_column("Date", width=100, cellStyle={"textAlign": "center"})
-                gb.configure_column("Predicted Close", width=120, type=["numericColumn"], cellStyle={"textAlign": "center"})
-                grid_options = gb.build()
-
-                table_height = min(len(forecast_df), 8) * 38 + 50
-
-                st.subheader("Forecast Details:")
-                st.markdown("<div style='max-width: 300px; margin: auto;'>", unsafe_allow_html=True)
-
-                AgGrid(
-                    forecast_df,
-                    gridOptions=grid_options,
-                    height=table_height,
-                    theme="balham",
-                    fit_columns_on_grid_load=False
-                )
-
-                st.markdown("""
-                <style>
-                .ag-theme-balham .ag-cell {
-                    padding: 4px !important;
-                    font-size: 13px;
-                }
-                </style>
-                """, unsafe_allow_html=True)
-
-                st.markdown("</div>", unsafe_allow_html=True)
-                                
-            except Exception as e:
-                st.error(f"Prediction failed: {str(e)}")
+        except Exception as e:
+            st.error(f"❌ Prediction failed: {str(e)}")
 
 if __name__ == "__main__":
     run_ai_prediction()
