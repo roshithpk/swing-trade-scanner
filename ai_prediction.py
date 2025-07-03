@@ -148,59 +148,72 @@ def run_ai_prediction():
             status_text.text("✅ Training completed!")
 
             # --- Prediction with Proper Sequence Updating ---
+          
+# --- Enhanced Prediction Loop ---
             model.eval()
             preds = []
             pred_dates = []
-            current_sequence = X_tensor[-1:].clone()  # Start with last known sequence
+            current_sequence = X_tensor[-1:].clone()  # Start with last known REAL sequence
             last_known = df.copy()
             current_date = last_known.index[-1]
-
+            
             # Get business days to predict
             business_days_to_predict = []
             temp_date = current_date
             for _ in range(pred_days):
                 temp_date = next_business_day(temp_date)
                 business_days_to_predict.append(temp_date)
-
-            st.write(f"📅 Business days to predict: {[d.date() for d in business_days_to_predict]}")
-
-            for target_date in business_days_to_predict:
+            
+            # Store the actual last known values
+            last_real_values = last_known[features].iloc[-1]
+            
+            for i, target_date in enumerate(business_days_to_predict):
                 with torch.no_grad():
-                    # Get prediction
+                    # Get prediction (scaled 0-1)
                     pred_scaled = model(current_sequence).item()
-                    st.write(f"🔢 Raw prediction for {target_date.date()}: {pred_scaled}")
                 
-                # Create new row for our dataframe
+                # Create realistic evolution of features
+                if i == 0:
+                    # For first prediction, blend with last real values
+                    new_values = last_real_values.copy()
+                    new_values['Close'] = scaler.inverse_transform(
+                        [[pred_scaled] + [0]*(len(features)-1)]
+                    )[0][0]
+                else:
+                    # For subsequent predictions, evolve from previous prediction
+                    prev_values = last_known[features].iloc[-1]
+                    change_factor = pred_scaled / (preds[-1]/scaler.data_max_[0])  # Relative change
+                    new_values = prev_values * (1 + (change_factor-1)*0.3)  # Dampened change
+                
+                # Create new row
                 new_row = last_known.iloc[-1].copy()
                 new_row.name = target_date
-                new_row['Close'] = scaler.inverse_transform(
-                    [[pred_scaled] + [0]*(len(features)-1)]
-                )[0][0]
+                new_row['Close'] = new_values['Close']
                 
                 # Add to dataframe and recompute indicators
                 last_known = pd.concat([last_known, pd.DataFrame([new_row])])
                 last_known = add_indicators(last_known)
                 
-                # Get the ACTUAL new values (now with proper indicators)
-                new_values = last_known[features].iloc[-1]
-                new_scaled = scaler.transform([new_values])[0]
+                # Get the ACTUAL new scaled values
+                new_scaled = scaler.transform(last_known[features].iloc[-1:])[0]
                 
-                # Update sequence (critical fix!)
+                # Update sequence properly
                 current_sequence_np = current_sequence.numpy()[0]
                 new_sequence_np = np.vstack([current_sequence_np[1:], new_scaled])
                 current_sequence = torch.tensor(new_sequence_np[np.newaxis], dtype=torch.float32)
                 
                 # Store prediction
-                pred_close = new_row['Close']
+                pred_close = new_values['Close']
                 preds.append(pred_close)
                 pred_dates.append(target_date)
                 
                 # Debug output
-                st.write(f"📅 Date: {target_date.date()} | Predicted Close: {pred_close:.2f}")
-                st.write(f"📊 New scaled values: {new_scaled}")
-                st.write(f"🔄 Sequence updated - Last 3 closes: {current_sequence_np[-3:,0]}...")
-
-            # Create final dataframe
+                st.write(f"📅 {target_date.date()}: {pred_close:.2f} "
+                         f"(Change: {(pred_close/preds[i-1]-1)*100 if i>0 else 0:.2f}%)")
+                st.write(f"📊 Indicators: RSI={new_values['RSI']:.2f}, "
+                         f"EMA20={new_values['EMA20']:.2f}")
+            
+            # --- Continue with existing code ---
             forecast_df = pd.DataFrame({
                 "Date": pred_dates,
                 "Predicted Close": preds
