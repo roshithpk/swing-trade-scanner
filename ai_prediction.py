@@ -134,7 +134,7 @@ def run_ai_prediction():
             progress_bar = st.progress(0)
             status_text = st.empty()
             
-            for epoch in range(30):
+            for epoch in range(50):
                 optimizer.zero_grad()
                 output = model(X_tensor)
                 loss = loss_fn(output.view(-1), y_tensor)
@@ -147,71 +147,79 @@ def run_ai_prediction():
             
             status_text.text("✅ Training completed!")
 
-            # --- Prediction with Proper Sequence Updating ---
-          
-# --- Enhanced Prediction Loop ---
-            # --- In your prediction loop ---
+            # --- Enhanced Prediction Loop ---
             model.eval()
             preds = []
             pred_dates = []
-            current_sequence = X_tensor[-1:].clone()
+            current_sequence = X_tensor[-1:].clone()  # Start with last known sequence
             last_known = df.copy()
             current_date = last_known.index[-1]
-            
+
             # Get business days to predict
             business_days_to_predict = []
             temp_date = current_date
             for _ in range(pred_days):
                 temp_date = next_business_day(temp_date)
                 business_days_to_predict.append(temp_date)
-            
+
+            # Store the actual last known values
+            last_real_values = last_known[features].iloc[-1]
+
             for i, target_date in enumerate(business_days_to_predict):
                 with torch.no_grad():
-                    # 1. Get prediction
+                    # Get prediction (scaled 0-1)
                     pred_scaled = model(current_sequence).item()
-                    pred_close = scaler.inverse_transform([[pred_scaled] + [0]*(len(features)-1)])[0][0]
+                    st.write(f"🔢 Forecast {i+1}: Raw prediction value: {pred_scaled}")
                 
-                # 2. Generate complete OHLC data
-                last_close = last_known['Close'].iloc[-1]
+                # Create realistic evolution of features
+                if i == 0:
+                    # For first prediction, blend with last real values
+                    new_values = last_real_values.copy()
+                    new_values['Close'] = scaler.inverse_transform(
+                        [[pred_scaled] + [0]*(len(features)-1)]
+                    )[0][0]
+                else:
+                    # For subsequent predictions, evolve from previous prediction
+                    prev_values = last_known[features].iloc[-1]
+                    change_factor = pred_scaled / (preds[-1]/scaler.data_max_[0])  # Relative change
+                    new_values = prev_values * (1 + (change_factor-1)*0.3)  # Dampened change
+                
+                # Create complete OHLC data for the new prediction
+                pred_close = new_values['Close']
                 new_row = {
-                    'Open': last_close,
-                    'High': max(last_close, pred_close) * 1.005,
-                    'Low': min(last_close, pred_close) * 0.995,
+                    'Open': last_known['Close'].iloc[-1],
+                    'High': pred_close * 1.005,
+                    'Low': pred_close * 0.995,
                     'Close': pred_close,
                     'Volume': last_known['Volume'].iloc[-1] * 0.95
                 }
                 
-                # 3. Add to dataframe (preserve all columns)
+                # Add to dataframe (preserve all columns)
                 new_df = pd.DataFrame([new_row], index=[target_date])
                 for col in last_known.columns:
                     if col not in new_row:
                         new_df[col] = last_known[col].iloc[-1]
                 last_known = pd.concat([last_known, new_df])
                 
-                # 4. RECOMPUTE indicators with proper OHLC
+                # Recompute indicators with proper OHLC data
                 last_known = add_indicators(last_known)
                 
-                # 5. CRITICAL: Get properly scaled new values
+                # Get properly scaled new values
                 new_scaled = scaler.transform(last_known[features].iloc[-1:])[0]
                 
-                # 6. PROPER sequence update
+                # Update sequence properly
                 current_sequence_np = current_sequence.numpy()[0]
                 new_sequence_np = np.vstack([current_sequence_np[1:], new_scaled])
                 current_sequence = torch.tensor(new_sequence_np[np.newaxis], dtype=torch.float32)
                 
-                # Debug checks
-                st.write(f"🔍 Last 3 sequence closes: {current_sequence_np[-3:,0]}")
-                st.write(f"🔍 New scaled values: {new_scaled}")
+                st.write(f"📅 Added row for date {target_date.date()} with Close = {pred_close:.2f}")
+                st.write(f"📈 Input to model for next step — shape: {current_sequence.shape}")
+                st.write(f"📈 Last element in sequence: {current_sequence[0,-1].numpy()}")
                 
                 preds.append(pred_close)
                 pred_dates.append(target_date)
-                            
-                # Debug output
-                st.write(f"📅 {target_date.date()}: "
-                         f"O:{pred_open:.2f} H:{pred_high:.2f} L:{pred_low:.2f} C:{pred_close:.2f}")
-                st.write(f"📈 New RSI: {last_known['RSI'].iloc[-1]:.2f}, "
-                         f"EMA20: {last_known['EMA20'].iloc[-1]:.2f}")
-            # --- Continue with existing code ---
+
+            # --- Generate Forecast DataFrame ---
             forecast_df = pd.DataFrame({
                 "Date": pred_dates,
                 "Predicted Close": preds
