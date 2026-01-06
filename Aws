@@ -1,0 +1,184 @@
+import streamlit as st
+import boto3
+import os
+import json
+import uuid
+import pandas as pd
+from io import BytesIO
+from datetime import datetime
+import fitz
+from pptx import Presentation
+
+# ---------------- CONFIG ----------------
+AWS_ACCESS_KEY = os.getenv("AWS_ACCESS_KEY")
+AWS_SECRET_KEY = os.getenv("AWS_SECRET_KEY")
+AWS_REGION = os.getenv("AWS_REGION", "us-east-1")
+S3_BUCKET = os.getenv("S3_BUCKET")
+MODEL_ID = "amazon.titan-text-premier-v1:0"
+
+STAGES = [
+    "Applied",
+    "In Progress",
+    "Interview Scheduled",
+    "Selected",
+    "Rejected"
+]
+
+# ---------------- AWS ----------------
+s3 = boto3.client(
+    "s3",
+    aws_access_key_id=AWS_ACCESS_KEY,
+    aws_secret_access_key=AWS_SECRET_KEY,
+    region_name=AWS_REGION,
+)
+
+bedrock = boto3.client(
+    "bedrock-runtime",
+    aws_access_key_id=AWS_ACCESS_KEY,
+    aws_secret_access_key=AWS_SECRET_KEY,
+    region_name=AWS_REGION,
+)
+
+# ---------------- HELPERS ----------------
+def extract_pdf_text(data):
+    doc = fitz.open(stream=data, filetype="pdf")
+    return "\n".join([p.get_text() for p in doc])
+
+def extract_pptx_text(data):
+    prs = Presentation(BytesIO(data))
+    text = []
+    for slide in prs.slides:
+        for shape in slide.shapes:
+            if hasattr(shape, "text"):
+                text.append(shape.text)
+    return "\n".join(text)
+
+def call_llm(jd, resume):
+    prompt = f"""
+You are a strict recruiter.
+
+Job Description:
+{jd}
+
+Resume:
+{resume}
+
+Return ONLY valid JSON:
+{{
+  "person_name": "",
+  "decision": "MATCH | PARTIAL_MATCH | NO_MATCH",
+  "score": 0,
+  "summary": "",
+  "matched_requirements": [],
+  "missing_requirements": []
+}}
+"""
+    resp = bedrock.converse(
+        modelId=MODEL_ID,
+        messages=[{"role": "user", "content": [{"text": prompt}]}],
+        inferenceConfig={"maxTokens": 800, "temperature": 0}
+    )
+    return json.loads(resp["output"]["message"]["content"][0]["text"])
+
+def list_all_applications():
+    objs = s3.list_objects_v2(Bucket=S3_BUCKET, Prefix="applications/")
+    apps = []
+    for o in objs.get("Contents", []):
+        if o["Key"].endswith("result.json"):
+            body = s3.get_object(Bucket=S3_BUCKET, Key=o["Key"])["Body"].read()
+            apps.append(json.loads(body))
+    return apps
+
+def update_stage(run_id, new_stage):
+    key = f"applications/{run_id}/result.json"
+    data = json.loads(s3.get_object(Bucket=S3_BUCKET, Key=key)["Body"].read())
+    data["stage"] = new_stage
+    s3.put_object(Bucket=S3_BUCKET, Key=key, Body=json.dumps(data))
+
+# ---------------- NAV ----------------
+if "page" not in st.session_state:
+    st.session_state.page = "home"
+
+# ================= HOME PAGE =================
+if st.session_state.page == "home":
+    st.title("📄 JD Validation")
+
+    if st.button("📊 View Application Status"):
+        st.session_state.page = "status"
+        st.rerun()
+
+    jd = st.text_area("Job Description")
+    resumes = st.file_uploader(
+        "Upload Resumes",
+        type=["pdf", "pptx"],
+        accept_multiple_files=True
+    )
+
+    if st.button("Run Validation"):
+        for r in resumes:
+            run_id = str(uuid.uuid4())
+            data = r.read()
+
+            text = (
+                extract_pdf_text(data)
+                if r.name.endswith(".pdf")
+                else extract_pptx_text(data)
+            )
+
+            result = call_llm(jd, text)
+            result["resume_name"] = r.name
+            result["run_id"] = run_id
+            result["stage"] = "Applied"
+            result["timestamp"] = datetime.utcnow().isoformat()
+
+            s3.put_object(
+                Bucket=S3_BUCKET,
+                Key=f"applications/{run_id}/{r.name}",
+                Body=data
+            )
+
+            s3.put_object(
+                Bucket=S3_BUCKET,
+                Key=f"applications/{run_id}/result.json",
+                Body=json.dumps(result)
+            )
+
+            st.success(f"Processed {r.name}")
+
+# ================= STATUS PAGE =================
+if st.session_state.page == "status":
+    st.title("📊 Application Status")
+
+    if st.button("⬅ Back to Home"):
+        st.session_state.page = "home"
+        st.rerun()
+
+    apps = list_all_applications()
+
+    if not apps:
+        st.info("No applications found.")
+        st.stop()
+
+    df = pd.DataFrame(apps)[
+        ["resume_name", "person_name", "decision", "score", "summary", "stage", "run_id"]
+    ]
+
+    st.dataframe(df, use_container_width=True)
+
+    st.subheader("Update Stage / View Details")
+
+    for app in apps:
+        with st.expander(app["resume_name"]):
+            new_stage = st.selectbox(
+                "Stage",
+                STAGES,
+                index=STAGES.index(app["stage"]),
+                key=app["run_id"]
+            )
+            if new_stage != app["stage"]:
+                update_stage(app["run_id"], new_stage)
+                st.success("Stage updated")
+
+            st.markdown("### Details")
+            st.write("**Matched:**", app["matched_requirements"])
+            st.write("**Missing:**", app["missing_requirements"])
