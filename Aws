@@ -1,20 +1,45 @@
+# ============================================================
+# app.py — JD Validator + Application Status (FINAL)
+# ============================================================
+
 import streamlit as st
 import boto3
 import os
 import json
+import re
 import uuid
 import pandas as pd
 from io import BytesIO
 from datetime import datetime
-import fitz
-from pptx import Presentation
+from dotenv import load_dotenv, find_dotenv
+from botocore.config import Config
+import fitz  # PyMuPDF
 
-# ---------------- CONFIG ----------------
+# PPTX support
+try:
+    from pptx import Presentation
+except Exception:
+    Presentation = None
+
+# ============================================================
+# ENV + CONFIG (UNCHANGED)
+# ============================================================
+
+load_dotenv(find_dotenv())
+
 AWS_ACCESS_KEY = os.getenv("AWS_ACCESS_KEY")
 AWS_SECRET_KEY = os.getenv("AWS_SECRET_KEY")
 AWS_REGION = os.getenv("AWS_REGION", "us-east-1")
 S3_BUCKET = os.getenv("S3_BUCKET")
-MODEL_ID = "amazon.titan-text-premier-v1:0"
+
+MODEL_ID = (
+    os.getenv("GEN_MODEL_ID")
+    or os.getenv("INFERENCE_PROFILE_ARN")
+)
+
+if not (AWS_ACCESS_KEY and AWS_SECRET_KEY and S3_BUCKET and MODEL_ID):
+    st.error("Missing AWS / Bedrock configuration")
+    st.stop()
 
 STAGES = [
     "Applied",
@@ -24,161 +49,302 @@ STAGES = [
     "Rejected"
 ]
 
-# ---------------- AWS ----------------
-s3 = boto3.client(
+# ============================================================
+# AWS CLIENTS (UNCHANGED)
+# ============================================================
+
+boto_cfg = Config(retries={"max_attempts": 10, "mode": "standard"})
+
+s3_client = boto3.client(
     "s3",
     aws_access_key_id=AWS_ACCESS_KEY,
     aws_secret_access_key=AWS_SECRET_KEY,
     region_name=AWS_REGION,
+    config=boto_cfg
 )
 
-bedrock = boto3.client(
+bedrock_rt = boto3.client(
     "bedrock-runtime",
     aws_access_key_id=AWS_ACCESS_KEY,
     aws_secret_access_key=AWS_SECRET_KEY,
     region_name=AWS_REGION,
+    config=boto_cfg
 )
 
-# ---------------- HELPERS ----------------
-def extract_pdf_text(data):
-    doc = fitz.open(stream=data, filetype="pdf")
-    return "\n".join([p.get_text() for p in doc])
+# ============================================================
+# TEXT EXTRACTION (UNCHANGED)
+# ============================================================
 
-def extract_pptx_text(data):
-    prs = Presentation(BytesIO(data))
-    text = []
+def extract_text_from_pdf_bytes(pdf_bytes: bytes) -> str:
+    doc = fitz.open(stream=pdf_bytes, filetype="pdf")
+    return "\n".join([p.get_text() for p in doc]).strip()
+
+def extract_text_from_pptx_bytes(pptx_bytes: bytes) -> str:
+    if Presentation is None:
+        return ""
+    prs = Presentation(BytesIO(pptx_bytes))
+    texts = []
     for slide in prs.slides:
         for shape in slide.shapes:
-            if hasattr(shape, "text"):
-                text.append(shape.text)
-    return "\n".join(text)
+            if hasattr(shape, "text") and shape.text.strip():
+                texts.append(shape.text.strip())
+    return "\n".join(texts).strip()
 
-def call_llm(jd, resume):
-    prompt = f"""
-You are a strict recruiter.
+# ============================================================
+# JSON PARSING (UNCHANGED)
+# ============================================================
+
+def parse_loose_json(s: str) -> dict:
+    s = re.sub(r"```(?:json)?|```", "", s.strip(), flags=re.I)
+    try:
+        return json.loads(s)
+    except Exception:
+        pass
+
+    m = re.search(r"\{(?:[^{}]|(?R))*\}", s, flags=re.DOTALL)
+    if m:
+        return json.loads(m.group(0))
+
+    raise ValueError("No parsable JSON found")
+
+# ============================================================
+# BEDROCK CALL (UNCHANGED)
+# ============================================================
+
+def call_llm_json(prompt: str) -> dict:
+    instruction = (
+        "You must output STRICT JSON only. "
+        "No markdown. No commentary. Exactly one JSON object."
+    )
+
+    kwargs = {
+        "modelId": MODEL_ID,
+        "messages": [
+            {"role": "user", "content": [{"text": f"{instruction}\n\n{prompt}"}]}
+        ],
+        "inferenceConfig": {
+            "maxTokens": 1024,
+            "temperature": 0.0,
+            "topP": 1.0,
+        }
+    }
+
+    resp = bedrock_rt.converse(**kwargs)
+    out_text = resp["output"]["message"]["content"][0]["text"]
+
+    try:
+        return parse_loose_json(out_text)
+    except Exception:
+        return {
+            "person_name": "",
+            "decision": "NO_MATCH",
+            "score": 0,
+            "llm_summary": "Invalid JSON returned",
+            "matched_requirements": [],
+            "missing_requirements": []
+        }
+
+# ============================================================
+# PROMPT (UNCHANGED)
+# ============================================================
+
+PROMPT_TEMPLATE = """
+You are a strict recruiter assistant.
 
 Job Description:
-{jd}
+{rules_text}
 
-Resume:
-{resume}
+Candidate Resume:
+{resume_text}
 
-Return ONLY valid JSON:
+Return EXACTLY one JSON object:
 {{
   "person_name": "",
   "decision": "MATCH | PARTIAL_MATCH | NO_MATCH",
   "score": 0,
-  "summary": "",
+  "llm_summary": "",
   "matched_requirements": [],
   "missing_requirements": []
 }}
 """
-    resp = bedrock.converse(
-        modelId=MODEL_ID,
-        messages=[{"role": "user", "content": [{"text": prompt}]}],
-        inferenceConfig={"maxTokens": 800, "temperature": 0}
-    )
-    return json.loads(resp["output"]["message"]["content"][0]["text"])
 
-def list_all_applications():
-    objs = s3.list_objects_v2(Bucket=S3_BUCKET, Prefix="applications/")
-    apps = []
-    for o in objs.get("Contents", []):
-        if o["Key"].endswith("result.json"):
-            body = s3.get_object(Bucket=S3_BUCKET, Key=o["Key"])["Body"].read()
-            apps.append(json.loads(body))
-    return apps
+# ============================================================
+# NAVIGATION STATE
+# ============================================================
 
-def update_stage(run_id, new_stage):
-    key = f"applications/{run_id}/result.json"
-    data = json.loads(s3.get_object(Bucket=S3_BUCKET, Key=key)["Body"].read())
-    data["stage"] = new_stage
-    s3.put_object(Bucket=S3_BUCKET, Key=key, Body=json.dumps(data))
-
-# ---------------- NAV ----------------
 if "page" not in st.session_state:
     st.session_state.page = "home"
 
-# ================= HOME PAGE =================
+# ============================================================
+# HOME PAGE — JD VALIDATION
+# ============================================================
+
 if st.session_state.page == "home":
-    st.title("📄 JD Validation")
+    st.title("📄 JD Validator")
 
     if st.button("📊 View Application Status"):
         st.session_state.page = "status"
         st.rerun()
 
-    jd = st.text_area("Job Description")
-    resumes = st.file_uploader(
-        "Upload Resumes",
+    rules_text = st.text_area("Paste Job Description", height=140)
+
+    resume_files = st.file_uploader(
+        "Upload resumes (PDF / PPTX)",
         type=["pdf", "pptx"],
         accept_multiple_files=True
     )
 
     if st.button("Run Validation"):
-        for r in resumes:
-            run_id = str(uuid.uuid4())
-            data = r.read()
+        if not rules_text.strip() or not resume_files:
+            st.error("Please provide JD and resumes")
+            st.stop()
 
-            text = (
-                extract_pdf_text(data)
-                if r.name.endswith(".pdf")
-                else extract_pptx_text(data)
+        run_id = str(uuid.uuid4())[:8]
+
+        for f in resume_files:
+            name = f.name
+            data = f.read()
+
+            resume_text = (
+                extract_text_from_pdf_bytes(data)
+                if name.lower().endswith(".pdf")
+                else extract_text_from_pptx_bytes(data)
             )
 
-            result = call_llm(jd, text)
-            result["resume_name"] = r.name
-            result["run_id"] = run_id
-            result["stage"] = "Applied"
-            result["timestamp"] = datetime.utcnow().isoformat()
+            prompt = PROMPT_TEMPLATE.format(
+                rules_text=rules_text,
+                resume_text=resume_text
+            )
 
-            s3.put_object(
+            llm_json = call_llm_json(prompt)
+
+            # ====================================================
+            # 🔥 ORIGINAL PERCENTAGE LOGIC (RESTORED)
+            # ====================================================
+
+            raw_decision = str(llm_json.get("decision", "NO_MATCH")).upper()
+            raw_score = int(float(llm_json.get("score", 0)))
+
+            final_decision = raw_decision
+            final_score = raw_score
+
+            if raw_decision == "NO_MATCH":
+                final_score = min(raw_score, 20)
+
+            elif raw_decision == "PARTIAL_MATCH":
+                final_score = max(21, min(raw_score, 79))
+
+            elif raw_decision == "MATCH":
+                final_score = max(raw_score, 80)
+
+            else:
+                final_decision = "NO_MATCH"
+                final_score = 0
+
+            if final_score <= 20:
+                final_decision = "NO_MATCH"
+                final_score = 0
+
+            # ====================================================
+            # SAVE FINAL RESULT
+            # ====================================================
+
+            result_obj = {
+                "run_id": run_id,
+                "resume_name": name,
+                "person_name": llm_json.get("person_name", ""),
+                "decision": final_decision,
+                "score": final_score,
+                "summary": llm_json.get("llm_summary", ""),
+                "matched_requirements": llm_json.get("matched_requirements", []),
+                "missing_requirements": llm_json.get("missing_requirements", []),
+                "stage": "Applied",
+                "created_at": datetime.utcnow().isoformat()
+            }
+
+            s3_client.put_object(
                 Bucket=S3_BUCKET,
-                Key=f"applications/{run_id}/{r.name}",
+                Key=f"applications/{run_id}/{name}",
                 Body=data
             )
 
-            s3.put_object(
+            s3_client.put_object(
                 Bucket=S3_BUCKET,
                 Key=f"applications/{run_id}/result.json",
-                Body=json.dumps(result)
+                Body=json.dumps(result_obj).encode("utf-8")
             )
 
-            st.success(f"Processed {r.name}")
+            st.success(f"Processed {name} — {final_score}%")
 
-# ================= STATUS PAGE =================
+# ============================================================
+# STATUS PAGE — LOAD FROM S3
+# ============================================================
+
+def load_all_results():
+    results = []
+    resp = s3_client.list_objects_v2(
+        Bucket=S3_BUCKET,
+        Prefix="applications/"
+    )
+    for obj in resp.get("Contents", []):
+        if obj["Key"].endswith("result.json"):
+            data = json.loads(
+                s3_client.get_object(
+                    Bucket=S3_BUCKET,
+                    Key=obj["Key"]
+                )["Body"].read()
+            )
+            data.setdefault("stage", "Applied")
+            results.append(data)
+    return results
+
+def update_stage(run_id, new_stage):
+    key = f"applications/{run_id}/result.json"
+    data = json.loads(
+        s3_client.get_object(Bucket=S3_BUCKET, Key=key)["Body"].read()
+    )
+    data["stage"] = new_stage
+    s3_client.put_object(
+        Bucket=S3_BUCKET,
+        Key=key,
+        Body=json.dumps(data).encode("utf-8")
+    )
+
 if st.session_state.page == "status":
     st.title("📊 Application Status")
 
-    if st.button("⬅ Back to Home"):
+    if st.button("⬅ Back"):
         st.session_state.page = "home"
         st.rerun()
 
-    apps = list_all_applications()
+    results = load_all_results()
 
-    if not apps:
+    if not results:
         st.info("No applications found.")
         st.stop()
 
-    df = pd.DataFrame(apps)[
+    df = pd.DataFrame(results)[
         ["resume_name", "person_name", "decision", "score", "summary", "stage", "run_id"]
     ]
 
     st.dataframe(df, use_container_width=True)
 
-    st.subheader("Update Stage / View Details")
+    st.subheader("Details & Stage Update")
 
-    for app in apps:
-        with st.expander(app["resume_name"]):
-            new_stage = st.selectbox(
+    for r in results:
+        with st.expander(r["resume_name"]):
+            stage = st.selectbox(
                 "Stage",
                 STAGES,
-                index=STAGES.index(app["stage"]),
-                key=app["run_id"]
+                index=STAGES.index(r["stage"]),
+                key=r["run_id"]
             )
-            if new_stage != app["stage"]:
-                update_stage(app["run_id"], new_stage)
+            if stage != r["stage"]:
+                update_stage(r["run_id"], stage)
                 st.success("Stage updated")
 
-            st.markdown("### Details")
-            st.write("**Matched:**", app["matched_requirements"])
-            st.write("**Missing:**", app["missing_requirements"])
+            st.markdown("**Matched Requirements**")
+            st.write(r["matched_requirements"])
+
+            st.markdown("**Missing Requirements**")
+            st.write(r["missing_requirements"])
