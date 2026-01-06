@@ -1,5 +1,5 @@
 # ============================================================
-# app.py — JD Validator + Application Status (FINAL)
+# app.py — JD Validator + ATS-Style Application Tracker
 # ============================================================
 
 import streamlit as st
@@ -50,7 +50,7 @@ STAGES = [
 ]
 
 # ============================================================
-# AWS CLIENTS (UNCHANGED)
+# AWS CLIENTS
 # ============================================================
 
 boto_cfg = Config(retries={"max_attempts": 10, "mode": "standard"})
@@ -72,7 +72,7 @@ bedrock_rt = boto3.client(
 )
 
 # ============================================================
-# TEXT EXTRACTION (UNCHANGED)
+# TEXT EXTRACTION
 # ============================================================
 
 def extract_text_from_pdf_bytes(pdf_bytes: bytes) -> str:
@@ -91,7 +91,7 @@ def extract_text_from_pptx_bytes(pptx_bytes: bytes) -> str:
     return "\n".join(texts).strip()
 
 # ============================================================
-# JSON PARSING (UNCHANGED)
+# JSON PARSING
 # ============================================================
 
 def parse_loose_json(s: str) -> dict:
@@ -105,10 +105,10 @@ def parse_loose_json(s: str) -> dict:
     if m:
         return json.loads(m.group(0))
 
-    raise ValueError("No parsable JSON found")
+    raise ValueError("No parsable JSON")
 
 # ============================================================
-# BEDROCK CALL (UNCHANGED)
+# BEDROCK CALL
 # ============================================================
 
 def call_llm_json(prompt: str) -> dict:
@@ -169,14 +169,14 @@ Return EXACTLY one JSON object:
 """
 
 # ============================================================
-# NAVIGATION STATE
+# NAV STATE
 # ============================================================
 
 if "page" not in st.session_state:
     st.session_state.page = "home"
 
 # ============================================================
-# HOME PAGE — JD VALIDATION
+# HOME PAGE — JD VALIDATION (DETAILS RESTORED)
 # ============================================================
 
 if st.session_state.page == "home":
@@ -218,9 +218,7 @@ if st.session_state.page == "home":
 
             llm_json = call_llm_json(prompt)
 
-            # ====================================================
-            # 🔥 ORIGINAL PERCENTAGE LOGIC (RESTORED)
-            # ====================================================
+            # ================== ORIGINAL SCORE LOGIC ==================
 
             raw_decision = str(llm_json.get("decision", "NO_MATCH")).upper()
             raw_score = int(float(llm_json.get("score", 0)))
@@ -230,13 +228,10 @@ if st.session_state.page == "home":
 
             if raw_decision == "NO_MATCH":
                 final_score = min(raw_score, 20)
-
             elif raw_decision == "PARTIAL_MATCH":
                 final_score = max(21, min(raw_score, 79))
-
             elif raw_decision == "MATCH":
                 final_score = max(raw_score, 80)
-
             else:
                 final_decision = "NO_MATCH"
                 final_score = 0
@@ -245,9 +240,7 @@ if st.session_state.page == "home":
                 final_decision = "NO_MATCH"
                 final_score = 0
 
-            # ====================================================
-            # SAVE FINAL RESULT
-            # ====================================================
+            # ================== SAVE TO S3 ==================
 
             result_obj = {
                 "run_id": run_id,
@@ -274,24 +267,37 @@ if st.session_state.page == "home":
                 Body=json.dumps(result_obj).encode("utf-8")
             )
 
-            st.success(f"Processed {name} — {final_score}%")
+            # ================== UI DETAILS (RESTORED) ==================
+
+            st.success(f"{name} — {final_decision} ({final_score}%)")
+            st.markdown(f"**Summary:** {result_obj['summary']}")
+
+            st.markdown("**Matched Requirements**")
+            if result_obj["matched_requirements"]:
+                for r in result_obj["matched_requirements"]:
+                    st.markdown(f"- ✅ {r}")
+            else:
+                st.markdown("- None")
+
+            st.markdown("**Missing Requirements**")
+            if result_obj["missing_requirements"]:
+                for r in result_obj["missing_requirements"]:
+                    st.markdown(f"- ❌ {r}")
+            else:
+                st.markdown("- None")
 
 # ============================================================
-# STATUS PAGE — LOAD FROM S3
+# STATUS PAGE — ROW-LEVEL DETAILS (FIXED)
 # ============================================================
 
 def load_all_results():
     results = []
-    resp = s3_client.list_objects_v2(
-        Bucket=S3_BUCKET,
-        Prefix="applications/"
-    )
+    resp = s3_client.list_objects_v2(Bucket=S3_BUCKET, Prefix="applications/")
     for obj in resp.get("Contents", []):
         if obj["Key"].endswith("result.json"):
             data = json.loads(
                 s3_client.get_object(
-                    Bucket=S3_BUCKET,
-                    Key=obj["Key"]
+                    Bucket=S3_BUCKET, Key=obj["Key"]
                 )["Body"].read()
             )
             data.setdefault("stage", "Applied")
@@ -323,16 +329,9 @@ if st.session_state.page == "status":
         st.info("No applications found.")
         st.stop()
 
-    df = pd.DataFrame(results)[
-        ["resume_name", "person_name", "decision", "score", "summary", "stage", "run_id"]
-    ]
-
-    st.dataframe(df, use_container_width=True)
-
-    st.subheader("Details & Stage Update")
-
     for r in results:
-        with st.expander(r["resume_name"]):
+        with st.expander(f"{r['resume_name']} — {r['decision']} ({r['score']}%)"):
+            st.markdown(f"**Candidate:** {r.get('person_name','')}")
             stage = st.selectbox(
                 "Stage",
                 STAGES,
@@ -343,8 +342,12 @@ if st.session_state.page == "status":
                 update_stage(r["run_id"], stage)
                 st.success("Stage updated")
 
+            st.markdown(f"**Summary:** {r['summary']}")
+
             st.markdown("**Matched Requirements**")
-            st.write(r["matched_requirements"])
+            for x in r["matched_requirements"]:
+                st.markdown(f"- ✅ {x}")
 
             st.markdown("**Missing Requirements**")
-            st.write(r["missing_requirements"])
+            for x in r["missing_requirements"]:
+                st.markdown(f"- ❌ {x}")
