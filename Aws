@@ -1,1 +1,289 @@
 
+# ============================================================
+# app.py — JD Validator + ATS (FINAL VERSION)
+# ============================================================
+
+import streamlit as st
+import boto3
+import os
+import json
+import re
+import uuid
+from io import BytesIO
+from datetime import datetime
+from dotenv import load_dotenv, find_dotenv
+from botocore.config import Config
+import fitz  # PyMuPDF
+
+try:
+    from pptx import Presentation
+except Exception:
+    Presentation = None
+
+# ============================================================
+# ENV
+# ============================================================
+
+load_dotenv(find_dotenv())
+
+AWS_ACCESS_KEY = os.getenv("AWS_ACCESS_KEY")
+AWS_SECRET_KEY = os.getenv("AWS_SECRET_KEY")
+AWS_REGION = os.getenv("AWS_REGION", "us-east-1")
+S3_BUCKET = os.getenv("S3_BUCKET")
+MODEL_ID = os.getenv("GEN_MODEL_ID") or os.getenv("INFERENCE_PROFILE_ARN")
+
+if not all([AWS_ACCESS_KEY, AWS_SECRET_KEY, S3_BUCKET, MODEL_ID]):
+    st.error("Missing AWS / Bedrock configuration")
+    st.stop()
+
+STAGES = ["Applied", "In Progress", "Interview Scheduled", "Selected", "Rejected"]
+
+# ============================================================
+# AWS CLIENTS
+# ============================================================
+
+cfg = Config(retries={"max_attempts": 10, "mode": "standard"})
+
+s3 = boto3.client(
+    "s3",
+    aws_access_key_id=AWS_ACCESS_KEY,
+    aws_secret_access_key=AWS_SECRET_KEY,
+    region_name=AWS_REGION,
+    config=cfg
+)
+
+bedrock = boto3.client(
+    "bedrock-runtime",
+    aws_access_key_id=AWS_ACCESS_KEY,
+    aws_secret_access_key=AWS_SECRET_KEY,
+    region_name=AWS_REGION,
+    config=cfg
+)
+
+# ============================================================
+# HELPERS
+# ============================================================
+
+def extract_pdf(data: bytes) -> str:
+    doc = fitz.open(stream=data, filetype="pdf")
+    return "\n".join(p.get_text() for p in doc)
+
+def extract_pptx(data: bytes) -> str:
+    if not Presentation:
+        return ""
+    prs = Presentation(BytesIO(data))
+    return "\n".join(
+        shape.text for slide in prs.slides for shape in slide.shapes if hasattr(shape, "text")
+    )
+
+def parse_json(text: str) -> dict:
+    text = re.sub(r"```(?:json)?|```", "", text, flags=re.I).strip()
+    try:
+        return json.loads(text)
+    except Exception:
+        m = re.search(r"\{.*\}", text, flags=re.S)
+        return json.loads(m.group(0)) if m else {}
+
+def presigned_url(key: str) -> str:
+    return s3.generate_presigned_url(
+        "get_object",
+        Params={"Bucket": S3_BUCKET, "Key": key},
+        ExpiresIn=600
+    )
+
+# ============================================================
+# LLM CALL
+# ============================================================
+
+def call_llm(prompt: str) -> dict:
+    resp = bedrock.converse(
+        modelId=MODEL_ID,
+        messages=[{
+            "role": "user",
+            "content": [{"text": "Return STRICT JSON only.\n\n" + prompt}]
+        }],
+        inferenceConfig={"temperature": 0.0, "maxTokens": 1024}
+    )
+    return parse_json(resp["output"]["message"]["content"][0]["text"])
+
+# ============================================================
+# PROMPT
+# ============================================================
+
+PROMPT = """
+You are a strict recruiter assistant.
+
+Job Description:
+{jd}
+
+Candidate Resume:
+{resume}
+
+Return EXACTLY one JSON object:
+{{
+  "person_name": "",
+  "decision": "MATCH | PARTIAL_MATCH | NO_MATCH",
+  "score": 0,
+  "llm_summary": "",
+  "matched_requirements": [],
+  "missing_requirements": []
+}}
+"""
+
+# ============================================================
+# NAV STATE
+# ============================================================
+
+if "page" not in st.session_state:
+    st.session_state.page = "home"
+
+if "selected" not in st.session_state:
+    st.session_state.selected = None
+
+# ============================================================
+# HOME PAGE
+# ============================================================
+
+if st.session_state.page == "home":
+    st.title("📄 JD Validator")
+
+    if st.button("📊 View Application Status"):
+        st.session_state.page = "status"
+        st.rerun()
+
+    jd = st.text_area("Paste Job Description", height=150)
+    files = st.file_uploader("Upload resumes (PDF / PPTX)", ["pdf", "pptx"], True)
+
+    if st.button("Run Validation"):
+        run_id = str(uuid.uuid4())[:8]
+
+        for f in files:
+            data = f.read()
+            text = extract_pdf(data) if f.name.endswith(".pdf") else extract_pptx(data)
+
+            llm = call_llm(PROMPT.format(jd=jd, resume=text))
+
+            decision = llm.get("decision", "NO_MATCH").upper()
+            score = int(llm.get("score", 0))
+
+            if decision == "MATCH":
+                score = max(score, 80)
+            elif decision == "PARTIAL_MATCH":
+                score = max(21, min(score, 79))
+            else:
+                decision, score = "NO_MATCH", 0
+
+            result = {
+                "run_id": run_id,
+                "resume_name": f.name,
+                "person_name": llm.get("person_name", ""),
+                "decision": decision,
+                "score": score,
+                "summary": llm.get("llm_summary", ""),
+                "matched_requirements": llm.get("matched_requirements", []),
+                "missing_requirements": llm.get("missing_requirements", []),
+                "stage": "Applied",
+                "hr_comments": "",
+                "created_at": datetime.utcnow().isoformat()
+            }
+
+            s3.put_object(Bucket=S3_BUCKET, Key=f"applications/{run_id}/{f.name}", Body=data)
+            s3.put_object(
+                Bucket=S3_BUCKET,
+                Key=f"applications/{run_id}/result.json",
+                Body=json.dumps(result).encode()
+            )
+
+            st.success(f"{f.name} — {decision} ({score}%)")
+            st.write("**Summary:**", result["summary"])
+            st.write("**Matched:**", result["matched_requirements"])
+            st.write("**Missing:**", result["missing_requirements"])
+
+# ============================================================
+# STATUS PAGE
+# ============================================================
+
+def load_results():
+    res = []
+    objs = s3.list_objects_v2(Bucket=S3_BUCKET, Prefix="applications/").get("Contents", [])
+    for o in objs:
+        if o["Key"].endswith("result.json"):
+            data = json.loads(s3.get_object(Bucket=S3_BUCKET, Key=o["Key"])["Body"].read())
+            res.append(data)
+    return res
+
+def save_result(run_id, data):
+    s3.put_object(
+        Bucket=S3_BUCKET,
+        Key=f"applications/{run_id}/result.json",
+        Body=json.dumps(data).encode()
+    )
+
+if st.session_state.page == "status":
+    st.title("📊 Application Status")
+
+    if st.button("⬅ Back"):
+        st.session_state.page = "home"
+        st.rerun()
+
+    results = load_results()
+
+    # TABLE HEADER
+    cols = st.columns([2, 3, 1, 1, 2, 1])
+    cols[0].markdown("**Candidate**")
+    cols[1].markdown("**Resume**")
+    cols[2].markdown("**%**")
+    cols[3].markdown("**Decision**")
+    cols[4].markdown("**Stage**")
+    cols[5].markdown("**Details**")
+
+    for r in results:
+        c = st.columns([2, 3, 1, 1, 2, 1])
+        c[0].write(r["person_name"])
+        c[1].write(r["resume_name"])
+        c[2].write(f"{r['score']}%")
+        c[3].write(r["decision"])
+
+        stage = c[4].selectbox(
+            "",
+            STAGES,
+            index=STAGES.index(r["stage"]),
+            key=f"stage_{r['run_id']}"
+        )
+        if stage != r["stage"]:
+            r["stage"] = stage
+            save_result(r["run_id"], r)
+
+        if c[5].button("View", key=f"view_{r['run_id']}"):
+            st.session_state.selected = r
+
+    # DETAILS PANEL
+    if st.session_state.selected:
+        st.divider()
+        sel = st.session_state.selected
+        st.subheader("Candidate Details")
+
+        st.write("**Name:**", sel["person_name"])
+        st.write("**Decision:**", f"{sel['decision']} ({sel['score']}%)")
+
+        resume_key = f"applications/{sel['run_id']}/{sel['resume_name']}"
+        url = presigned_url(resume_key)
+
+        if sel["resume_name"].lower().endswith(".pdf"):
+            st.markdown(f'<iframe src="{url}" width="100%" height="500"></iframe>', unsafe_allow_html=True)
+        else:
+            st.link_button("Download Resume", url)
+
+        st.write("**Summary:**", sel["summary"])
+        st.write("**Matched Requirements:**", sel["matched_requirements"])
+        st.write("**Missing Requirements:**", sel["missing_requirements"])
+
+        comment = st.text_area("HR Comments", sel.get("hr_comments", ""))
+        if st.button("Save Comment"):
+            sel["hr_comments"] = comment
+            save_result(sel["run_id"], sel)
+            st.success("Comments saved")
+
+        if st.button("Close"):
+            st.session_state.selected = None
+            st.rerun()
