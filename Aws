@@ -1,1 +1,347 @@
 
+# ============================================================
+# app.py — JD Validator + Application Tracker
+# ============================================================
+
+import streamlit as st
+import boto3
+import os
+import json
+import uuid
+import re
+from io import BytesIO
+from datetime import datetime
+from dotenv import load_dotenv, find_dotenv
+from botocore.config import Config
+import fitz  # PyMuPDF
+
+try:
+    from pptx import Presentation
+except Exception:
+    Presentation = None
+
+# ============================================================
+# ENV
+# ============================================================
+
+load_dotenv(find_dotenv())
+
+AWS_ACCESS_KEY = os.getenv("AWS_ACCESS_KEY")
+AWS_SECRET_KEY = os.getenv("AWS_SECRET_KEY")
+AWS_REGION = os.getenv("AWS_REGION", "us-east-1")
+S3_BUCKET = os.getenv("S3_BUCKET")
+MODEL_ID = os.getenv("GEN_MODEL_ID") or os.getenv("INFERENCE_PROFILE_ARN")
+
+STAGES = [
+    "Applied",
+    "In Progress",
+    "Interview Scheduled",
+    "Selected",
+    "Rejected"
+]
+
+if not all([AWS_ACCESS_KEY, AWS_SECRET_KEY, AWS_REGION, S3_BUCKET, MODEL_ID]):
+    st.error("Missing environment variables")
+    st.stop()
+
+# ============================================================
+# AWS CLIENTS
+# ============================================================
+
+cfg = Config(retries={"max_attempts": 10, "mode": "standard"})
+
+s3 = boto3.client(
+    "s3",
+    aws_access_key_id=AWS_ACCESS_KEY,
+    aws_secret_access_key=AWS_SECRET_KEY,
+    region_name=AWS_REGION,
+    config=cfg
+)
+
+bedrock = boto3.client(
+    "bedrock-runtime",
+    aws_access_key_id=AWS_ACCESS_KEY,
+    aws_secret_access_key=AWS_SECRET_KEY,
+    region_name=AWS_REGION,
+    config=cfg
+)
+
+# ============================================================
+# UTILS
+# ============================================================
+
+def extract_pdf(data: bytes) -> str:
+    doc = fitz.open(stream=data, filetype="pdf")
+    return "\n".join(p.get_text() for p in doc)
+
+def extract_pptx(data: bytes) -> str:
+    if not Presentation:
+        return ""
+    prs = Presentation(BytesIO(data))
+    out = []
+    for slide in prs.slides:
+        for shape in slide.shapes:
+            if hasattr(shape, "text"):
+                out.append(shape.text)
+    return "\n".join(out)
+
+def parse_json_safe(text: str) -> dict:
+    text = re.sub(r"```(?:json)?|```", "", text, flags=re.I).strip()
+    try:
+        return json.loads(text)
+    except Exception:
+        m = re.search(r"\{.*\}", text, flags=re.S)
+        return json.loads(m.group(0)) if m else {}
+
+def call_llm(prompt: str) -> dict:
+    resp = bedrock.converse(
+        modelId=MODEL_ID,
+        messages=[
+            {
+                "role": "user",
+                "content": [{"text": "Return STRICT JSON only.\n\n" + prompt}]
+            }
+        ],
+        inferenceConfig={"temperature": 0.0, "maxTokens": 1024}
+    )
+    raw = resp["output"]["message"]["content"][0]["text"]
+    return parse_json_safe(raw)
+
+def load_all_results():
+    results = []
+    objs = s3.list_objects_v2(
+        Bucket=S3_BUCKET,
+        Prefix="applications/"
+    ).get("Contents", [])
+
+    for o in objs:
+        if o["Key"].endswith("result.json"):
+            data = json.loads(
+                s3.get_object(
+                    Bucket=S3_BUCKET,
+                    Key=o["Key"]
+                )["Body"].read()
+            )
+            results.append(data)
+    return results
+
+def save_result(run_id: str, data: dict):
+    s3.put_object(
+        Bucket=S3_BUCKET,
+        Key=f"applications/{run_id}/result.json",
+        Body=json.dumps(data).encode("utf-8")
+    )
+
+def delete_application(run_id: str):
+    prefix = f"applications/{run_id}/"
+    objs = s3.list_objects_v2(
+        Bucket=S3_BUCKET,
+        Prefix=prefix
+    ).get("Contents", [])
+
+    if objs:
+        s3.delete_objects(
+            Bucket=S3_BUCKET,
+            Delete={"Objects": [{"Key": o["Key"]} for o in objs]}
+        )
+
+# ============================================================
+# PROMPT
+# ============================================================
+
+PROMPT = """
+You are a strict recruiter assistant.
+
+Job Description:
+{jd}
+
+Candidate Resume:
+{resume}
+
+Return EXACT JSON:
+{{
+  "person_name": "",
+  "decision": "MATCH | PARTIAL_MATCH | NO_MATCH",
+  "score": 0,
+  "llm_summary": "",
+  "matched_requirements": [],
+  "missing_requirements": []
+}}
+"""
+
+# ============================================================
+# SESSION STATE
+# ============================================================
+
+if "page" not in st.session_state:
+    st.session_state.page = "home"
+
+if "selected_app" not in st.session_state:
+    st.session_state.selected_app = None
+
+# ============================================================
+# HOME PAGE
+# ============================================================
+
+if st.session_state.page == "home":
+    st.title("📄 JD Validation")
+
+    if st.button("📊 View Application Status"):
+        st.session_state.page = "status"
+        st.rerun()
+
+    jd = st.text_area("Paste Job Description", height=150)
+    files = st.file_uploader(
+        "Upload Resumes (PDF / PPTX)",
+        type=["pdf", "pptx"],
+        accept_multiple_files=True
+    )
+
+    if st.button("Run Validation"):
+        if not jd or not files:
+            st.error("Job description and resume required")
+            st.stop()
+
+        run_id = str(uuid.uuid4())[:8]
+
+        for f in files:
+            data = f.read()
+            resume_text = (
+                extract_pdf(data)
+                if f.name.lower().endswith(".pdf")
+                else extract_pptx(data)
+            )
+
+            llm = call_llm(PROMPT.format(jd=jd, resume=resume_text))
+
+            raw_score = int(llm.get("score", 0))
+            raw_decision = llm.get("decision", "NO_MATCH").upper()
+
+            if raw_decision == "MATCH":
+                score = max(raw_score, 80)
+                decision = "MATCH"
+            elif raw_decision == "PARTIAL_MATCH":
+                score = max(21, min(raw_score, 79))
+                decision = "PARTIAL_MATCH"
+            else:
+                score = 0
+                decision = "NO_MATCH"
+
+            if score <= 20:
+                score = 0
+                decision = "NO_MATCH"
+
+            result = {
+                "run_id": run_id,
+                "resume_name": f.name,
+                "person_name": llm.get("person_name", ""),
+                "decision": decision,
+                "score": score,
+                "summary": llm.get("llm_summary", ""),
+                "matched_requirements": llm.get("matched_requirements", []),
+                "missing_requirements": llm.get("missing_requirements", []),
+                "stage": "Applied",
+                "hr_comments": "",
+                "created_at": datetime.utcnow().isoformat()
+            }
+
+            s3.put_object(
+                Bucket=S3_BUCKET,
+                Key=f"applications/{run_id}/{f.name}",
+                Body=data
+            )
+
+            save_result(run_id, result)
+
+            st.success(f"{f.name} — {decision} ({score}%)")
+
+            st.markdown("### Summary")
+            st.write(result["summary"])
+
+            st.markdown("### Matched Requirements")
+            for m in result["matched_requirements"]:
+                st.markdown(f"- ✅ {m}")
+
+            st.markdown("### Missing Requirements")
+            for m in result["missing_requirements"]:
+                st.markdown(f"- ❌ {m}")
+
+            st.divider()
+
+# ============================================================
+# APPLICATION STATUS PAGE
+# ============================================================
+
+if st.session_state.page == "status":
+    st.title("📊 Application Status")
+
+    if st.button("⬅ Back"):
+        st.session_state.page = "home"
+        st.session_state.selected_app = None
+        st.rerun()
+
+    results = load_all_results()
+
+    header = st.columns([2, 3, 1, 1, 2, 1, 1])
+    header[0].markdown("**Candidate**")
+    header[1].markdown("**Resume**")
+    header[2].markdown("**Match %**")
+    header[3].markdown("**Decision**")
+    header[4].markdown("**Stage**")
+    header[5].markdown("**Details**")
+    header[6].markdown("**Delete**")
+
+    for r in results:
+        row = st.columns([2, 3, 1, 1, 2, 1, 1])
+        row[0].write(r["person_name"])
+        row[1].write(r["resume_name"])
+        row[2].write(f"{r['score']}%")
+        row[3].write(r["decision"])
+
+        stage = row[4].selectbox(
+            "",
+            STAGES,
+            index=STAGES.index(r["stage"]),
+            key=f"stage_{r['run_id']}"
+        )
+
+        if stage != r["stage"]:
+            r["stage"] = stage
+            save_result(r["run_id"], r)
+
+        if row[5].button("View", key=f"view_{r['run_id']}"):
+            st.session_state.selected_app = r
+
+        if row[6].button("🗑 Delete", key=f"delete_{r['run_id']}"):
+            delete_application(r["run_id"])
+            st.session_state.selected_app = None
+            st.rerun()
+
+    if st.session_state.selected_app:
+        st.divider()
+        app = st.session_state.selected_app
+
+        st.subheader("Candidate Details")
+        st.write(f"**Name:** {app['person_name']}")
+        st.write(f"**Decision:** {app['decision']} ({app['score']}%)")
+
+        st.markdown("### Summary")
+        st.write(app["summary"])
+
+        st.markdown("### Matched Requirements")
+        for m in app["matched_requirements"]:
+            st.markdown(f"- ✅ {m}")
+
+        st.markdown("### Missing Requirements")
+        for m in app["missing_requirements"]:
+            st.markdown(f"- ❌ {m}")
+
+        comments = st.text_area("HR Comments", app.get("hr_comments", ""))
+        if st.button("Save Comments"):
+            app["hr_comments"] = comments
+            save_result(app["run_id"], app)
+            st.success("Comments saved")
+
+        if st.button("Close"):
+            st.session_state.selected_app = None
+            st.rerun()
