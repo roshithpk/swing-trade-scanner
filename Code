@@ -1,120 +1,44 @@
 
-Option Explicit
-
-Public Sub RunDuplicationCheck()
-
-    Dim wsSource As Worksheet
-    Dim wsSummary As Worksheet
-    Dim frm As frmSelectColumns
+Private Function BuildKey(ws As Worksheet, rowNum As Long, cols As Collection) As String
     
-    Dim SelectedSet1 As Collection
-    Dim SelectedSet2 As Collection
+    Dim key As String
+    Dim colName As Variant
+    Dim colIndex As Variant
     
-    Dim dict1 As Object, dict2 As Object
-    Dim lastRow As Long, lastCol As Long
-    Dim i As Long
+    key = ""
     
-    Dim key1 As String, key2 As String
-    Dim remarkCol As Long
-    Dim remarkText As String
-    
-    Set wsSource = ThisWorkbook.Sheets("Sheet1")
-
-    ' Show form
-    Set frm = New frmSelectColumns
-    frm.Show vbModal
-    
-    If frm.SelectedSet1 Is Nothing Or frm.SelectedSet2 Is Nothing Then Exit Sub
-    
-    Set SelectedSet1 = frm.SelectedSet1
-    Set SelectedSet2 = frm.SelectedSet2
-    
-    Unload frm
-    
-    lastRow = wsSource.Cells(wsSource.Rows.Count, 1).End(xlUp).Row
-    lastCol = wsSource.Cells(1, wsSource.Columns.Count).End(xlToLeft).Column
-
-    ' Create remarks column
-    remarkCol = lastCol + 1
-    wsSource.Cells(1, remarkCol).Value = "Duplicate_Remarks"
-
-    Set dict1 = CreateObject("Scripting.Dictionary")
-    Set dict2 = CreateObject("Scripting.Dictionary")
-
-    ' Build dictionaries
-    For i = 2 To lastRow
+    For Each colName In cols
+        colIndex = Application.Match(colName, ws.Rows(1), 0)
         
-        key1 = BuildKey(wsSource, i, SelectedSet1)
-        key2 = BuildKey(wsSource, i, SelectedSet2)
-        
-        If key1 <> "" Then
-            If Not dict1.Exists(key1) Then dict1.Add key1, New Collection
-            dict1(key1).Add i
+        If Not IsError(colIndex) Then
+            key = key & "|" & Trim(CStr(ws.Cells(rowNum, colIndex).Value))
+        Else
+            key = key & "|"
         End If
-        
-        If key2 <> "" Then
-            If Not dict2.Exists(key2) Then dict2.Add key2, New Collection
-            dict2(key2).Add i
-        End If
-        
-    Next i
-
-    ' Highlight + remarks
-    For i = 2 To lastRow
-        
-        remarkText = ""
-        
-        key1 = BuildKey(wsSource, i, SelectedSet1)
-        key2 = BuildKey(wsSource, i, SelectedSet2)
-        
-        If key1 <> "" Then
-            If dict1.Exists(key1) Then
-                If dict1(key1).Count > 1 Then
-                    remarkText = remarkText & "Rule 1, "
-                End If
-            End If
-        End If
-        
-        If key2 <> "" Then
-            If dict2.Exists(key2) Then
-                If dict2(key2).Count > 1 Then
-                    remarkText = remarkText & "Rule 2, "
-                End If
-            End If
-        End If
-        
-        If remarkText <> "" Then
-            remarkText = Left(remarkText, Len(remarkText) - 2)
-            wsSource.Cells(i, remarkCol).Value = remarkText
-            wsSource.Rows(i).Interior.Color = RGB(255, 230, 153)
-        End If
-        
-    Next i
-
-    ' Summary sheet
-    On Error Resume Next
-    Set wsSummary = ThisWorkbook.Sheets("Duplicate_Summary")
-    On Error GoTo 0
+    Next colName
     
-    If wsSummary Is Nothing Then
-        Set wsSummary = ThisWorkbook.Sheets.Add
-        wsSummary.Name = "Duplicate_Summary"
-    Else
-        wsSummary.Cells.Clear
-    End If
-    
-    wsSummary.Range("A1").Value = "Rule"
-    wsSummary.Range("B1").Value = "Duplicate Groups"
-    wsSummary.Range("C1").Value = "Rows Involved"
+    BuildKey = key
 
-    wsSummary.Range("A2").Value = "Rule 1 (3 columns)"
-    wsSummary.Range("B2").Value = CountDuplicateGroups(dict1)
-    wsSummary.Range("C2").Value = CountDuplicateRows(dict1)
+End Function
 
-    wsSummary.Range("A3").Value = "Rule 2 (6 columns)"
-    wsSummary.Range("B3").Value = CountDuplicateGroups(dict2)
-    wsSummary.Range("C3").Value = CountDuplicateRows(dict2)
 
-    MsgBox "Duplicate check completed successfully!", vbInformation
+Private Function CountDuplicateGroups(dict As Object) As Long
+    Dim k As Variant, c As Long
+    c = 0
+    For Each k In dict.Keys
+        If dict(k).Count > 1 Then c = c + 1
+    Next k
+    CountDuplicateGroups = c
+End Function
 
-End Sub
+
+Private Function CountDuplicateRows(dict As Object) As Long
+    Dim k As Variant, c As Long
+    c = 0
+    For Each k In dict.Keys
+        If dict(k).Count > 1 Then
+            c = c + dict(k).Count
+        End If
+    Next k
+    CountDuplicateRows = c
+End Function
