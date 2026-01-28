@@ -1,88 +1,120 @@
 
 Option Explicit
 
-Public SelectedSet1 As Collection
-Public SelectedSet2 As Collection
+Public Sub RunDuplicationCheck()
 
-Private Sub UserForm_Initialize()
-
-    Dim ws As Worksheet
-    Dim lastCol As Long, j As Long
-    Dim headerName As String
+    Dim wsSource As Worksheet
+    Dim wsSummary As Worksheet
+    Dim frm As frmSelectColumns
     
-    ' Default columns (can be header names, not letters)
-    Dim defaultRule1 As Variant
-    Dim defaultRule2 As Variant
+    Dim SelectedSet1 As Collection
+    Dim SelectedSet2 As Collection
     
-    defaultRule1 = Array("K", "L", "P")          ' Rule 1 (3 columns)
-    defaultRule2 = Array("K", "L", "M", "N", "O", "P") ' Rule 2 (6 columns)
+    Dim dict1 As Object, dict2 As Object
+    Dim lastRow As Long, lastCol As Long
+    Dim i As Long
+    
+    Dim key1 As String, key2 As String
+    Dim remarkCol As Long
+    Dim remarkText As String
+    
+    Set wsSource = ThisWorkbook.Sheets("Sheet1")
 
-    Set ws = ThisWorkbook.Sheets("Sheet1")
-    lastCol = ws.Cells(1, ws.Columns.Count).End(xlToLeft).Column
+    ' Show form
+    Set frm = New frmSelectColumns
+    frm.Show vbModal
+    
+    If frm.SelectedSet1 Is Nothing Or frm.SelectedSet2 Is Nothing Then Exit Sub
+    
+    Set SelectedSet1 = frm.SelectedSet1
+    Set SelectedSet2 = frm.SelectedSet2
+    
+    Unload frm
+    
+    lastRow = wsSource.Cells(wsSource.Rows.Count, 1).End(xlUp).Row
+    lastCol = wsSource.Cells(1, wsSource.Columns.Count).End(xlToLeft).Column
 
-    ' Populate listboxes with headers
-    For j = 1 To lastCol
-        headerName = Trim(ws.Cells(1, j).Value)
+    ' Create remarks column
+    remarkCol = lastCol + 1
+    wsSource.Cells(1, remarkCol).Value = "Duplicate_Remarks"
+
+    Set dict1 = CreateObject("Scripting.Dictionary")
+    Set dict2 = CreateObject("Scripting.Dictionary")
+
+    ' Build dictionaries
+    For i = 2 To lastRow
         
-        If headerName <> "" Then
-            lstRule1.AddItem headerName
-            lstRule2.AddItem headerName
-            
-            ' Auto-select defaults
-            If IsInArray(headerName, defaultRule1) Then
-                lstRule1.Selected(lstRule1.ListCount - 1) = True
-            End If
-            
-            If IsInArray(headerName, defaultRule2) Then
-                lstRule2.Selected(lstRule2.ListCount - 1) = True
+        key1 = BuildKey(wsSource, i, SelectedSet1)
+        key2 = BuildKey(wsSource, i, SelectedSet2)
+        
+        If key1 <> "" Then
+            If Not dict1.Exists(key1) Then dict1.Add key1, New Collection
+            dict1(key1).Add i
+        End If
+        
+        If key2 <> "" Then
+            If Not dict2.Exists(key2) Then dict2.Add key2, New Collection
+            dict2(key2).Add i
+        End If
+        
+    Next i
+
+    ' Highlight + remarks
+    For i = 2 To lastRow
+        
+        remarkText = ""
+        
+        key1 = BuildKey(wsSource, i, SelectedSet1)
+        key2 = BuildKey(wsSource, i, SelectedSet2)
+        
+        If key1 <> "" Then
+            If dict1.Exists(key1) Then
+                If dict1(key1).Count > 1 Then
+                    remarkText = remarkText & "Rule 1, "
+                End If
             End If
         End If
-    Next j
+        
+        If key2 <> "" Then
+            If dict2.Exists(key2) Then
+                If dict2(key2).Count > 1 Then
+                    remarkText = remarkText & "Rule 2, "
+                End If
+            End If
+        End If
+        
+        If remarkText <> "" Then
+            remarkText = Left(remarkText, Len(remarkText) - 2)
+            wsSource.Cells(i, remarkCol).Value = remarkText
+            wsSource.Rows(i).Interior.Color = RGB(255, 230, 153)
+        End If
+        
+    Next i
 
-End Sub
-
-Private Sub btnOK_Click()
-
-    Dim i As Long
+    ' Summary sheet
+    On Error Resume Next
+    Set wsSummary = ThisWorkbook.Sheets("Duplicate_Summary")
+    On Error GoTo 0
     
-    Set SelectedSet1 = New Collection
-    Set SelectedSet2 = New Collection
-
-    ' Rule 1
-    For i = 0 To lstRule1.ListCount - 1
-        If lstRule1.Selected(i) Then
-            SelectedSet1.Add lstRule1.List(i)
-        End If
-    Next i
-
-    ' Rule 2
-    For i = 0 To lstRule2.ListCount - 1
-        If lstRule2.Selected(i) Then
-            SelectedSet2.Add lstRule2.List(i)
-        End If
-    Next i
-
-    If SelectedSet1.Count = 0 Or SelectedSet2.Count = 0 Then
-        MsgBox "Please select columns for both rules.", vbExclamation
-        Exit Sub
+    If wsSummary Is Nothing Then
+        Set wsSummary = ThisWorkbook.Sheets.Add
+        wsSummary.Name = "Duplicate_Summary"
+    Else
+        wsSummary.Cells.Clear
     End If
+    
+    wsSummary.Range("A1").Value = "Rule"
+    wsSummary.Range("B1").Value = "Duplicate Groups"
+    wsSummary.Range("C1").Value = "Rows Involved"
 
-    Me.Hide
+    wsSummary.Range("A2").Value = "Rule 1 (3 columns)"
+    wsSummary.Range("B2").Value = CountDuplicateGroups(dict1)
+    wsSummary.Range("C2").Value = CountDuplicateRows(dict1)
+
+    wsSummary.Range("A3").Value = "Rule 2 (6 columns)"
+    wsSummary.Range("B3").Value = CountDuplicateGroups(dict2)
+    wsSummary.Range("C3").Value = CountDuplicateRows(dict2)
+
+    MsgBox "Duplicate check completed successfully!", vbInformation
+
 End Sub
-
-Private Sub btnCancel_Click()
-    Set SelectedSet1 = Nothing
-    Set SelectedSet2 = Nothing
-    Me.Hide
-End Sub
-
-Private Function IsInArray(val As String, arr As Variant) As Boolean
-    Dim i As Long
-    For i = LBound(arr) To UBound(arr)
-        If LCase(arr(i)) = LCase(val) Then
-            IsInArray = True
-            Exit Function
-        End If
-    Next i
-    IsInArray = False
-End Function
