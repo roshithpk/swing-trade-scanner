@@ -1,1 +1,88 @@
 
+Option Explicit
+
+Public SelectedSet1 As Collection
+Public SelectedSet2 As Collection
+
+Private Sub UserForm_Initialize()
+
+    Dim ws As Worksheet
+    Dim lastCol As Long, j As Long
+    Dim headerName As String
+    
+    ' Default columns (can be header names, not letters)
+    Dim defaultRule1 As Variant
+    Dim defaultRule2 As Variant
+    
+    defaultRule1 = Array("K", "L", "P")          ' Rule 1 (3 columns)
+    defaultRule2 = Array("K", "L", "M", "N", "O", "P") ' Rule 2 (6 columns)
+
+    Set ws = ThisWorkbook.Sheets("Sheet1")
+    lastCol = ws.Cells(1, ws.Columns.Count).End(xlToLeft).Column
+
+    ' Populate listboxes with headers
+    For j = 1 To lastCol
+        headerName = Trim(ws.Cells(1, j).Value)
+        
+        If headerName <> "" Then
+            lstRule1.AddItem headerName
+            lstRule2.AddItem headerName
+            
+            ' Auto-select defaults
+            If IsInArray(headerName, defaultRule1) Then
+                lstRule1.Selected(lstRule1.ListCount - 1) = True
+            End If
+            
+            If IsInArray(headerName, defaultRule2) Then
+                lstRule2.Selected(lstRule2.ListCount - 1) = True
+            End If
+        End If
+    Next j
+
+End Sub
+
+Private Sub btnOK_Click()
+
+    Dim i As Long
+    
+    Set SelectedSet1 = New Collection
+    Set SelectedSet2 = New Collection
+
+    ' Rule 1
+    For i = 0 To lstRule1.ListCount - 1
+        If lstRule1.Selected(i) Then
+            SelectedSet1.Add lstRule1.List(i)
+        End If
+    Next i
+
+    ' Rule 2
+    For i = 0 To lstRule2.ListCount - 1
+        If lstRule2.Selected(i) Then
+            SelectedSet2.Add lstRule2.List(i)
+        End If
+    Next i
+
+    If SelectedSet1.Count = 0 Or SelectedSet2.Count = 0 Then
+        MsgBox "Please select columns for both rules.", vbExclamation
+        Exit Sub
+    End If
+
+    Me.Hide
+End Sub
+
+Private Sub btnCancel_Click()
+    Set SelectedSet1 = Nothing
+    Set SelectedSet2 = Nothing
+    Me.Hide
+End Sub
+
+Private Function IsInArray(val As String, arr As Variant) As Boolean
+    Dim i As Long
+    For i = LBound(arr) To UBound(arr)
+        If LCase(arr(i)) = LCase(val) Then
+            IsInArray = True
+            Exit Function
+        End If
+    Next i
+    IsInArray = False
+End Function
