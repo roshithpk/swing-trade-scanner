@@ -1,87 +1,39 @@
 
-Option Explicit
+Private Sub WriteDQ(ws As Worksheet, ByRef r As Long, _
+    rowNum As Long, colName As String, refVal As String, _
+    cellVal As String, issue As String)
 
-Public Sub RunDataQualityMacro()
-
-    Dim ws As Worksheet, wsOut As Worksheet
-    Dim frm As frmDataQuality
-    Dim lastRow As Long, i As Long
-    Dim outRow As Long
-    Dim colName As Variant, colIndex As Variant
-    Dim cellVal As String
-
-    Set ws = ThisWorkbook.Sheets("Sheet1")
-
-    Set frm = New frmDataQuality
-    frm.Show vbModal
-
-    If frm.ColsSpecialChar Is Nothing Then Exit Sub
-
-    ' Find last row across all columns
-    lastRow = 0
-    For i = 1 To ws.Cells(1, ws.Columns.Count).End(xlToLeft).Column
-        lastRow = Application.Max(lastRow, ws.Cells(ws.Rows.Count, i).End(xlUp).Row)
-    Next i
-
-    ' Prepare output sheet
-    On Error Resume Next
-    Set wsOut = ThisWorkbook.Sheets("Data_Quality_Summary")
-    On Error GoTo 0
-
-    If wsOut Is Nothing Then
-        Set wsOut = ThisWorkbook.Sheets.Add
-        wsOut.Name = "Data_Quality_Summary"
-    Else
-        wsOut.Cells.Clear
-    End If
-
-    wsOut.Range("A1:E1").Value = _
-        Array("Row", "Column", "Column A Ref", "Value", "Issue")
-
-    outRow = 2
-
-    For i = 2 To lastRow
-
-        ' Rule 1 – Special characters
-        For Each colName In frm.ColsSpecialChar
-            colIndex = Application.Match(colName, ws.Rows(1), 0)
-            If Not IsError(colIndex) Then
-                cellVal = Trim(CStr(ws.Cells(i, colIndex).Value))
-                If cellVal <> "" And ContainsSpecialChar(cellVal) Then
-                    WriteDQ wsOut, outRow, i, colName, ws.Cells(i, 1).Value, cellVal, _
-                        "Contains special characters"
-                End If
-            End If
-        Next colName
-
-        ' Rule 2 – No numbers allowed
-        For Each colName In frm.ColsNoNumbers
-            colIndex = Application.Match(colName, ws.Rows(1), 0)
-            If Not IsError(colIndex) Then
-                cellVal = Trim(CStr(ws.Cells(i, colIndex).Value))
-                If cellVal <> "" And HasNumber(cellVal) Then
-                    WriteDQ wsOut, outRow, i, colName, ws.Cells(i, 1).Value, cellVal, _
-                        "Contains numeric value"
-                End If
-            End If
-        Next colName
-
-        ' Rule 3 – Email validation
-        For Each colName In frm.ColsEmail
-            colIndex = Application.Match(colName, ws.Rows(1), 0)
-            If Not IsError(colIndex) Then
-                cellVal = Trim(CStr(ws.Cells(i, colIndex).Value))
-                If cellVal <> "" Then
-                    If InStr(cellVal, "@") = 0 Or InStr(cellVal, ".") = 0 Then
-                        WriteDQ wsOut, outRow, i, colName, ws.Cells(i, 1).Value, cellVal, _
-                            "Invalid email format"
-                    End If
-                End If
-            End If
-        Next colName
-
-    Next i
-
-    MsgBox "Data Quality check completed.", vbInformation
-
+    ws.Cells(r, 1).Value = rowNum
+    ws.Cells(r, 2).Value = colName
+    ws.Cells(r, 3).Value = refVal
+    ws.Cells(r, 4).Value = cellVal
+    ws.Cells(r, 5).Value = issue
+    r = r + 1
 End Sub
+
+
+Private Function HasNumber(txt As String) As Boolean
+    Dim i As Long
+    For i = 1 To Len(txt)
+        If Mid(txt, i, 1) Like "#" Then
+            HasNumber = True
+            Exit Function
+        End If
+    Next i
+End Function
+
+
+Private Function ContainsSpecialChar(txt As String) As Boolean
+    ContainsSpecialChar = txt Like "*[,=_\[\]{}!@#$%^&*]*"
+End Function
+
+
+Public Function IsInArraySafe(val As String, arr As Variant) As Boolean
+    Dim i As Long
+    For i = LBound(arr) To UBound(arr)
+        If LCase(Trim(arr(i))) = LCase(Trim(val)) Then
+            IsInArraySafe = True
+            Exit Function
+        End If
+    Next i
+End Function
