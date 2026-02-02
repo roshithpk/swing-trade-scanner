@@ -1,44 +1,81 @@
 
-Private Function BuildKey(ws As Worksheet, rowNum As Long, cols As Collection) As String
-    
-    Dim key As String
-    Dim colName As Variant
-    Dim colIndex As Variant
-    
-    key = ""
-    
-    For Each colName In cols
-        colIndex = Application.Match(colName, ws.Rows(1), 0)
-        
-        If Not IsError(colIndex) Then
-            key = key & "|" & Trim(CStr(ws.Cells(rowNum, colIndex).Value))
-        Else
-            key = key & "|"
+Option Explicit
+
+Public ColsSpecialChar As Collection
+Public ColsNoNumbers As Collection
+Public ColsEmail As Collection
+
+Private Sub UserForm_Initialize()
+
+    Dim ws As Worksheet
+    Dim lastCol As Long, i As Long
+    Dim headerName As String
+
+    ' DEFAULT SELECTIONS (hardcoded)
+    Dim defSpecial As Variant
+    Dim defNoNumbers As Variant
+    Dim defEmail As Variant
+
+    defSpecial = Array("Name", "Address Line 1")
+    defNoNumbers = Array("Name", "Address Line 3", "Address Line 4")
+    defEmail = Array("Email", "Email Address")
+
+    Set ws = ThisWorkbook.Sheets("Sheet1")
+    lastCol = ws.Cells(1, ws.Columns.Count).End(xlToLeft).Column
+
+    For i = 1 To lastCol
+        headerName = Trim(ws.Cells(1, i).Value)
+        If headerName <> "" Then
+
+            lstSpecialChar.AddItem headerName
+            lstNoNumbers.AddItem headerName
+            lstEmail.AddItem headerName
+
+            If IsInArraySafe(headerName, defSpecial) Then
+                lstSpecialChar.Selected(lstSpecialChar.ListCount - 1) = True
+            End If
+
+            If IsInArraySafe(headerName, defNoNumbers) Then
+                lstNoNumbers.Selected(lstNoNumbers.ListCount - 1) = True
+            End If
+
+            If IsInArraySafe(headerName, defEmail) Then
+                lstEmail.Selected(lstEmail.ListCount - 1) = True
+            End If
+
         End If
-    Next colName
-    
-    BuildKey = key
+    Next i
 
-End Function
+End Sub
 
 
-Private Function CountDuplicateGroups(dict As Object) As Long
-    Dim k As Variant, c As Long
-    c = 0
-    For Each k In dict.Keys
-        If dict(k).Count > 1 Then c = c + 1
-    Next k
-    CountDuplicateGroups = c
-End Function
+Private Sub btnRun_Click()
+
+    Dim i As Long
+
+    Set ColsSpecialChar = New Collection
+    Set ColsNoNumbers = New Collection
+    Set ColsEmail = New Collection
+
+    For i = 0 To lstSpecialChar.ListCount - 1
+        If lstSpecialChar.Selected(i) Then ColsSpecialChar.Add lstSpecialChar.List(i)
+    Next i
+
+    For i = 0 To lstNoNumbers.ListCount - 1
+        If lstNoNumbers.Selected(i) Then ColsNoNumbers.Add lstNoNumbers.List(i)
+    Next i
+
+    For i = 0 To lstEmail.ListCount - 1
+        If lstEmail.Selected(i) Then ColsEmail.Add lstEmail.List(i)
+    Next i
+
+    Me.Hide
+End Sub
 
 
-Private Function CountDuplicateRows(dict As Object) As Long
-    Dim k As Variant, c As Long
-    c = 0
-    For Each k In dict.Keys
-        If dict(k).Count > 1 Then
-            c = c + dict(k).Count
-        End If
-    Next k
-    CountDuplicateRows = c
-End Function
+Private Sub btnCancel_Click()
+    Set ColsSpecialChar = Nothing
+    Set ColsNoNumbers = Nothing
+    Set ColsEmail = Nothing
+    Me.Hide
+End Sub
