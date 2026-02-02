@@ -1,81 +1,87 @@
 
 Option Explicit
 
-Public ColsSpecialChar As Collection
-Public ColsNoNumbers As Collection
-Public ColsEmail As Collection
+Public Sub RunDataQualityMacro()
 
-Private Sub UserForm_Initialize()
-
-    Dim ws As Worksheet
-    Dim lastCol As Long, i As Long
-    Dim headerName As String
-
-    ' DEFAULT SELECTIONS (hardcoded)
-    Dim defSpecial As Variant
-    Dim defNoNumbers As Variant
-    Dim defEmail As Variant
-
-    defSpecial = Array("Name", "Address Line 1")
-    defNoNumbers = Array("Name", "Address Line 3", "Address Line 4")
-    defEmail = Array("Email", "Email Address")
+    Dim ws As Worksheet, wsOut As Worksheet
+    Dim frm As frmDataQuality
+    Dim lastRow As Long, i As Long
+    Dim outRow As Long
+    Dim colName As Variant, colIndex As Variant
+    Dim cellVal As String
 
     Set ws = ThisWorkbook.Sheets("Sheet1")
-    lastCol = ws.Cells(1, ws.Columns.Count).End(xlToLeft).Column
 
-    For i = 1 To lastCol
-        headerName = Trim(ws.Cells(1, i).Value)
-        If headerName <> "" Then
+    Set frm = New frmDataQuality
+    frm.Show vbModal
 
-            lstSpecialChar.AddItem headerName
-            lstNoNumbers.AddItem headerName
-            lstEmail.AddItem headerName
+    If frm.ColsSpecialChar Is Nothing Then Exit Sub
 
-            If IsInArraySafe(headerName, defSpecial) Then
-                lstSpecialChar.Selected(lstSpecialChar.ListCount - 1) = True
+    ' Find last row across all columns
+    lastRow = 0
+    For i = 1 To ws.Cells(1, ws.Columns.Count).End(xlToLeft).Column
+        lastRow = Application.Max(lastRow, ws.Cells(ws.Rows.Count, i).End(xlUp).Row)
+    Next i
+
+    ' Prepare output sheet
+    On Error Resume Next
+    Set wsOut = ThisWorkbook.Sheets("Data_Quality_Summary")
+    On Error GoTo 0
+
+    If wsOut Is Nothing Then
+        Set wsOut = ThisWorkbook.Sheets.Add
+        wsOut.Name = "Data_Quality_Summary"
+    Else
+        wsOut.Cells.Clear
+    End If
+
+    wsOut.Range("A1:E1").Value = _
+        Array("Row", "Column", "Column A Ref", "Value", "Issue")
+
+    outRow = 2
+
+    For i = 2 To lastRow
+
+        ' Rule 1 – Special characters
+        For Each colName In frm.ColsSpecialChar
+            colIndex = Application.Match(colName, ws.Rows(1), 0)
+            If Not IsError(colIndex) Then
+                cellVal = Trim(CStr(ws.Cells(i, colIndex).Value))
+                If cellVal <> "" And ContainsSpecialChar(cellVal) Then
+                    WriteDQ wsOut, outRow, i, colName, ws.Cells(i, 1).Value, cellVal, _
+                        "Contains special characters"
+                End If
             End If
+        Next colName
 
-            If IsInArraySafe(headerName, defNoNumbers) Then
-                lstNoNumbers.Selected(lstNoNumbers.ListCount - 1) = True
+        ' Rule 2 – No numbers allowed
+        For Each colName In frm.ColsNoNumbers
+            colIndex = Application.Match(colName, ws.Rows(1), 0)
+            If Not IsError(colIndex) Then
+                cellVal = Trim(CStr(ws.Cells(i, colIndex).Value))
+                If cellVal <> "" And HasNumber(cellVal) Then
+                    WriteDQ wsOut, outRow, i, colName, ws.Cells(i, 1).Value, cellVal, _
+                        "Contains numeric value"
+                End If
             End If
+        Next colName
 
-            If IsInArraySafe(headerName, defEmail) Then
-                lstEmail.Selected(lstEmail.ListCount - 1) = True
+        ' Rule 3 – Email validation
+        For Each colName In frm.ColsEmail
+            colIndex = Application.Match(colName, ws.Rows(1), 0)
+            If Not IsError(colIndex) Then
+                cellVal = Trim(CStr(ws.Cells(i, colIndex).Value))
+                If cellVal <> "" Then
+                    If InStr(cellVal, "@") = 0 Or InStr(cellVal, ".") = 0 Then
+                        WriteDQ wsOut, outRow, i, colName, ws.Cells(i, 1).Value, cellVal, _
+                            "Invalid email format"
+                    End If
+                End If
             End If
+        Next colName
 
-        End If
     Next i
 
-End Sub
+    MsgBox "Data Quality check completed.", vbInformation
 
-
-Private Sub btnRun_Click()
-
-    Dim i As Long
-
-    Set ColsSpecialChar = New Collection
-    Set ColsNoNumbers = New Collection
-    Set ColsEmail = New Collection
-
-    For i = 0 To lstSpecialChar.ListCount - 1
-        If lstSpecialChar.Selected(i) Then ColsSpecialChar.Add lstSpecialChar.List(i)
-    Next i
-
-    For i = 0 To lstNoNumbers.ListCount - 1
-        If lstNoNumbers.Selected(i) Then ColsNoNumbers.Add lstNoNumbers.List(i)
-    Next i
-
-    For i = 0 To lstEmail.ListCount - 1
-        If lstEmail.Selected(i) Then ColsEmail.Add lstEmail.List(i)
-    Next i
-
-    Me.Hide
-End Sub
-
-
-Private Sub btnCancel_Click()
-    Set ColsSpecialChar = Nothing
-    Set ColsNoNumbers = Nothing
-    Set ColsEmail = Nothing
-    Me.Hide
 End Sub
