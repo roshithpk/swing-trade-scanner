@@ -1,39 +1,126 @@
 
-Private Sub WriteDQ(ws As Worksheet, ByRef r As Long, _
-    rowNum As Long, colName As String, refVal As String, _
-    cellVal As String, issue As String)
+Option Explicit
 
-    ws.Cells(r, 1).Value = rowNum
-    ws.Cells(r, 2).Value = colName
-    ws.Cells(r, 3).Value = refVal
-    ws.Cells(r, 4).Value = cellVal
-    ws.Cells(r, 5).Value = issue
-    r = r + 1
+Public Sub DataQualityMacro()
+
+    Dim ws As Worksheet, wsResult As Worksheet
+    Dim frm As frmDataQuality
+
+    Dim colsSpecial As Collection
+    Dim colsNoNum As Collection
+    Dim colsEmail As Collection
+
+    Dim lastRow As Long, lastCol As Long
+    Dim rowNum As Long, colNum As Long
+    Dim colName As String, cellValue As String
+    Dim outRow As Long
+
+    Set ws = ThisWorkbook.Sheets("Sheet1")
+
+    ' ===== Show UserForm =====
+    Set frm = New frmDataQuality
+    frm.Show vbModal
+
+    If frm.SelectedSpecialCharCols Is Nothing Then Exit Sub
+
+    Set colsSpecial = frm.SelectedSpecialCharCols
+    Set colsNoNum = frm.SelectedNoNumberCols
+    Set colsEmail = frm.SelectedEmailCols
+    Unload frm
+
+    ' ===== Prepare Result Sheet =====
+    On Error Resume Next
+    Set wsResult = ThisWorkbook.Sheets("Data_Quality_Summary")
+    On Error GoTo 0
+
+    If wsResult Is Nothing Then
+        Set wsResult = ThisWorkbook.Worksheets.Add
+        wsResult.Name = "Data_Quality_Summary"
+    Else
+        wsResult.Cells.Clear
+    End If
+
+    wsResult.Range("A1:D1").Value = Array("Row Number", "Column Name", "Rule", "Cell Value")
+    outRow = 2
+
+    ' ===== Find last row (robust) =====
+    lastCol = ws.Cells(1, ws.Columns.Count).End(xlToLeft).Column
+    lastRow = 0
+    For colNum = 1 To lastCol
+        lastRow = Application.Max(lastRow, ws.Cells(ws.Rows.Count, colNum).End(xlUp).Row)
+    Next colNum
+
+    ' ===== Main Scan =====
+    For rowNum = 2 To lastRow
+        For colNum = 1 To lastCol
+
+            colName = Trim(ws.Cells(1, colNum).Value)
+            cellValue = Trim(CStr(ws.Cells(rowNum, colNum).Value))
+
+            ' Rule 1 – Special characters / NA / Unknown
+            If IsInCollection(colName, colsSpecial) Then
+                If ContainsInvalidSpecialChar(cellValue) Then
+                    WriteResult wsResult, outRow, rowNum, colName, "Special Character Rule", cellValue
+                    ws.Cells(rowNum, colNum).Interior.Color = RGB(255, 199, 206)
+                    outRow = outRow + 1
+                End If
+            End If
+
+            ' Rule 2 – No numbers allowed
+            If IsInCollection(colName, colsNoNum) Then
+                If cellValue <> "" And cellValue Like "*[0-9]*" Then
+                    WriteResult wsResult, outRow, rowNum, colName, "Number Not Allowed Rule", cellValue
+                    ws.Cells(rowNum, colNum).Interior.Color = RGB(255, 235, 156)
+                    outRow = outRow + 1
+                End If
+            End If
+
+            ' Rule 3 – Email validation
+            If IsInCollection(colName, colsEmail) Then
+                If cellValue <> "" And Not IsValidEmail(cellValue) Then
+                    WriteResult wsResult, outRow, rowNum, colName, "Invalid Email Rule", cellValue
+                    ws.Cells(rowNum, colNum).Interior.Color = RGB(189, 215, 238)
+                    outRow = outRow + 1
+                End If
+            End If
+
+        Next colNum
+    Next rowNum
+
+    MsgBox "Data Quality Check Completed", vbInformation
+
 End Sub
 
+Private Sub WriteResult(ws As Worksheet, r As Long, rowNum As Long, colName As String, ruleName As String, val As String)
+    ws.Cells(r, 1).Value = rowNum
+    ws.Cells(r, 2).Value = colName
+    ws.Cells(r, 3).Value = ruleName
+    ws.Cells(r, 4).Value = val
+End Sub
 
-Private Function HasNumber(txt As String) As Boolean
+Private Function IsInCollection(val As String, col As Collection) As Boolean
+    Dim v As Variant
+    For Each v In col
+        If LCase(v) = LCase(val) Then
+            IsInCollection = True
+            Exit Function
+        End If
+    Next v
+End Function
+
+Private Function ContainsInvalidSpecialChar(txt As String) As Boolean
+    Dim bad As Variant
+    bad = Array("NA", "N/A", "UNKNOWN", "NOT APPLICABLE", "@", "!", "?", "*", "\", "<", ">", "$", "%", "^", "&", "(", ")", "_", "=", "[", "]")
+
     Dim i As Long
-    For i = 1 To Len(txt)
-        If Mid(txt, i, 1) Like "#" Then
-            HasNumber = True
+    For i = LBound(bad) To UBound(bad)
+        If InStr(1, UCase(txt), bad(i), vbTextCompare) > 0 Then
+            ContainsInvalidSpecialChar = True
             Exit Function
         End If
     Next i
 End Function
 
-
-Private Function ContainsSpecialChar(txt As String) As Boolean
-    ContainsSpecialChar = txt Like "*[,=_\[\]{}!@#$%^&*]*"
-End Function
-
-
-Public Function IsInArraySafe(val As String, arr As Variant) As Boolean
-    Dim i As Long
-    For i = LBound(arr) To UBound(arr)
-        If LCase(Trim(arr(i))) = LCase(Trim(val)) Then
-            IsInArraySafe = True
-            Exit Function
-        End If
-    Next i
+Private Function IsValidEmail(email As String) As Boolean
+    IsValidEmail = (InStr(email, "@") > 1 And InStr(email, ".") > InStr(email, "@") + 1)
 End Function
