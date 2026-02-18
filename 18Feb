@@ -1,1 +1,171 @@
 
+Sub Extract_Jobs_To_Table()
+
+    Dim wsIn As Worksheet, wsOut As Worksheet
+    Dim lastRow As Long, outRow As Long
+    Dim i As Long
+    Dim lineTxt As String, cleanLine As String
+
+    ' Job variables
+    Dim jobId As String, jobName As String
+    Dim sourcePath As String, sourceServer As String
+    Dim targetPath As String, targetServer As String
+    Dim successEmail As String, failureEmail As String
+    Dim frequency As String, remarks As String
+    Dim loadCount As Long, uploadCount As Long
+
+    ' Regex
+    Dim reLoad As Object, reUpload As Object
+    Set reLoad = CreateObject("VBScript.RegExp")
+    Set reUpload = CreateObject("VBScript.RegExp")
+
+    reLoad.Pattern = "\bload\b"
+    reUpload.Pattern = "\bupload\b"
+    reLoad.IgnoreCase = True
+    reUpload.IgnoreCase = True
+
+    Set wsIn = ThisWorkbook.Worksheets("Sheet1")
+
+    ' Output sheet
+    On Error Resume Next
+    Set wsOut = ThisWorkbook.Worksheets("Output")
+    On Error GoTo 0
+
+    If wsOut Is Nothing Then
+        Set wsOut = ThisWorkbook.Worksheets.Add
+        wsOut.Name = "Output"
+    Else
+        wsOut.UsedRange.ClearContents
+    End If
+
+    wsOut.Range("A1:J1").Value = Array( _
+        "Job Id", "Job Name", "Source path", "Source server name", _
+        "Target Path", "Target Server name", _
+        "Success email", "Failure email", _
+        "Frequency", "Remarks")
+
+    outRow = 2
+    lastRow = wsIn.Cells(wsIn.Rows.Count, "A").End(xlUp).Row
+    jobId = ""
+
+    For i = 1 To lastRow
+        lineTxt = Trim(wsIn.Cells(i, "A").Value)
+
+        ' Remove numbering like "2. "
+        cleanLine = lineTxt
+        If InStr(cleanLine, ".") > 0 And IsNumeric(Left(cleanLine, InStr(cleanLine, ".") - 1)) Then
+            cleanLine = Trim(Mid(cleanLine, InStr(cleanLine, ".") + 1))
+        End If
+
+        ' -------- JOB HEADER --------
+        If InStr(cleanLine, "(#") > 0 Then
+
+            If jobId <> "" Then
+                WriteOutput wsOut, outRow, jobId, jobName, sourcePath, _
+                    sourceServer, targetPath, targetServer, successEmail, _
+                    failureEmail, frequency, remarks
+                outRow = outRow + 1
+            End If
+
+            sourcePath = "Not available"
+            sourceServer = "Not available"
+            targetPath = "Not available"
+            targetServer = "Not available"
+            successEmail = "Not available"
+            failureEmail = "Not available"
+            frequency = "Not available"
+            remarks = ""
+            loadCount = 0
+            uploadCount = 0
+
+            jobName = Trim(Left(cleanLine, InStr(cleanLine, "(#") - 1))
+            jobId = Replace(Mid(cleanLine, InStr(cleanLine, "(#") + 2), ")", "")
+
+        ' -------- LOAD --------
+        ElseIf reLoad.Test(cleanLine) And Not reUpload.Test(cleanLine) Then
+            loadCount = loadCount + 1
+
+            If loadCount = 1 Then
+                Dim pFrom As Long
+                pFrom = InStr(1, LCase(cleanLine), " from ")
+
+                sourcePath = Trim(Mid(cleanLine, InStr(1, LCase(cleanLine), "load") + 4, _
+                                  pFrom - (InStr(1, LCase(cleanLine), "load") + 4)))
+                sourceServer = Trim(Mid(cleanLine, pFrom + 6))
+            Else
+                remarks = remarks & "Multiple Load found; "
+            End If
+
+        ' -------- UPLOAD --------
+        ElseIf reUpload.Test(cleanLine) Then
+            uploadCount = uploadCount + 1
+
+            If uploadCount = 1 Then
+                Dim pOn As Long
+                pOn = InStr(1, LCase(cleanLine), " on ")
+
+                targetPath = Trim(Mid(cleanLine, InStr(1, LCase(cleanLine), "upload") + 6, _
+                                  pOn - (InStr(1, LCase(cleanLine), "upload") + 6)))
+                targetServer = Trim(Mid(cleanLine, pOn + 4))
+            Else
+                remarks = remarks & "Multiple Upload found; "
+            End If
+
+        ' -------- FREQUENCY --------
+        ElseIf LCase(cleanLine) Like "run*" Then
+            frequency = cleanLine
+
+        ' -------- EMAIL --------
+        ElseIf InStr(LCase(cleanLine), "send email") > 0 Then
+            If InStr(LCase(cleanLine), "failure") > 0 Then
+                failureEmail = ExtractEmail(cleanLine)
+            ElseIf InStr(LCase(cleanLine), "success") > 0 Then
+                successEmail = ExtractEmail(cleanLine)
+            End If
+        End If
+    Next i
+
+    ' Write last job
+    If jobId <> "" Then
+        WriteOutput wsOut, outRow, jobId, jobName, sourcePath, _
+            sourceServer, targetPath, targetServer, successEmail, _
+            failureEmail, frequency, remarks
+    End If
+
+    wsOut.Columns.AutoFit
+    MsgBox "Extraction completed successfully", vbInformation
+
+End Sub
+
+
+' -------- WRITE OUTPUT --------
+Sub WriteOutput(ws As Worksheet, r As Long, jobId As String, jobName As String, _
+    srcPath As String, srcServer As String, tgtPath As String, tgtServer As String, _
+    succEmail As String, failEmail As String, freq As String, remarks As String)
+
+    ws.Cells(r, 1).Value = jobId
+    ws.Cells(r, 2).Value = jobName
+    ws.Cells(r, 3).Value = srcPath
+    ws.Cells(r, 4).Value = srcServer
+    ws.Cells(r, 5).Value = tgtPath
+    ws.Cells(r, 6).Value = tgtServer
+    ws.Cells(r, 7).Value = succEmail
+    ws.Cells(r, 8).Value = failEmail
+    ws.Cells(r, 9).Value = freq
+    ws.Cells(r, 10).Value = IIf(remarks = "", "Not available", remarks)
+
+End Sub
+
+
+' -------- EMAIL EXTRACTOR --------
+Function ExtractEmail(txt As String) As String
+    Dim p1 As Long, p2 As Long
+    p1 = InStr(txt, "'")
+    p2 = InStr(p1 + 1, txt, "'")
+
+    If p1 > 0 And p2 > p1 Then
+        ExtractEmail = Mid(txt, p1 + 1, p2 - p1 - 1)
+    Else
+        ExtractEmail = "Not available"
+    End If
+End Function
