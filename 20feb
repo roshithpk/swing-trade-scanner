@@ -1,1 +1,104 @@
 
+Sub FindOwnersBasedOnServer()
+
+    Dim wsOutput As Worksheet
+    Dim wsA As Worksheet
+    Dim lastRow As Long
+    Dim lastRowA As Long
+    Dim i As Long
+    Dim j As Long
+    
+    Dim sourcePath As String
+    Dim sourceServer As String
+    Dim targetPath As String
+    Dim targetServer As String
+    Dim selectedPath As String
+    Dim fullPath As String
+    
+    Dim keywords As Variant
+    Dim keyword As Variant
+    Dim matchFound As Boolean
+    Dim ownerFound As Boolean
+    
+    ' Set worksheets
+    Set wsOutput = ThisWorkbook.Sheets("Sheet3")
+    Set wsA = ThisWorkbook.Sheets("SheetA")
+    
+    ' Define server keywords
+    keywords = Array("BOF", "BRQ", "BWH", "BR")
+    
+    lastRow = wsOutput.Cells(wsOutput.Rows.Count, "C").End(xlUp).Row
+    lastRowA = wsA.Cells(wsA.Rows.Count, "A").End(xlUp).Row
+    
+    ' Loop through Output sheet
+    For i = 2 To lastRow
+        
+        sourcePath = wsOutput.Cells(i, "C").Value
+        sourceServer = wsOutput.Cells(i, "D").Value
+        targetPath = wsOutput.Cells(i, "E").Value
+        targetServer = wsOutput.Cells(i, "F").Value
+        
+        selectedPath = ""
+        matchFound = False
+        
+        ' Step 1: Check Source Server Name
+        For Each keyword In keywords
+            If InStr(1, sourceServer, keyword, vbTextCompare) > 0 Then
+                selectedPath = sourcePath
+                matchFound = True
+                Exit For
+            End If
+        Next keyword
+        
+        ' Step 2: If no source match, check Target Server Name
+        If matchFound = False Then
+            For Each keyword In keywords
+                If InStr(1, targetServer, keyword, vbTextCompare) > 0 Then
+                    selectedPath = targetPath
+                    matchFound = True
+                    Exit For
+                End If
+            Next keyword
+        End If
+        
+        ' If no server match
+        If matchFound = False Then
+            wsOutput.Cells(i, "G").Value = "Not Found"
+            wsOutput.Cells(i, "H").Value = "Not Found"
+            wsOutput.Cells(i, "I").Value = "Not Found"
+        Else
+        
+            wsOutput.Cells(i, "G").Value = selectedPath
+            
+            ownerFound = False
+            
+            ' Normalize path (replace / with \ and remove *)
+            selectedPath = Replace(selectedPath, "/", "\")
+            selectedPath = Replace(selectedPath, "*", "")
+            
+            ' Step 3: Search in SheetA Full Path (Partial Match)
+            For j = 2 To lastRowA
+                
+                fullPath = wsA.Cells(j, "A").Value
+                
+                If InStr(1, fullPath, selectedPath, vbTextCompare) > 0 Then
+                    wsOutput.Cells(i, "H").Value = wsA.Cells(j, "B").Value
+                    wsOutput.Cells(i, "I").Value = wsA.Cells(j, "C").Value
+                    ownerFound = True
+                    Exit For
+                End If
+                
+            Next j
+            
+            If ownerFound = False Then
+                wsOutput.Cells(i, "H").Value = "Owner Not Found"
+                wsOutput.Cells(i, "I").Value = "Owner Not Found"
+            End If
+            
+        End If
+        
+    Next i
+    
+    MsgBox "Process Completed Successfully!", vbInformation
+
+End Sub
